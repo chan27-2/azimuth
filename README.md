@@ -25,12 +25,12 @@ Most Service Bus tools show a message body as a block of text. Busscope decodes 
 
 ## Run it
 
-You need Node 20+ and, for real data, the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) signed in with `az login`.
+You need Node 22.12 or newer and, for real data, the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) signed in with `az login`.
 
 ```bash
 git clone https://github.com/chan27-2/busscope.git
 cd busscope
-npm install
+npm install        # also downloads the Electron binary
 npm start          # builds the UI and opens the app
 ```
 

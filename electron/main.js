@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, shell, nativeTheme } from "electron";
 
 app.setName("Busscope");
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as azure from "./azure.js";
 import { demo } from "./demo.js";
@@ -18,7 +19,8 @@ const handlers = {
   entities: az.entities,
   peek: az.peek,
 };
-const icon = path.join(__dirname, "../brand/icon-1024.png");
+const iconPath = path.join(__dirname, "../brand/icon-1024.png");
+const icon = existsSync(iconPath) ? iconPath : undefined;
 for (const [name, fn] of Object.entries(handlers)) {
   ipcMain.handle(name, async (_e, arg) => {
     try {
@@ -32,7 +34,7 @@ ipcMain.handle("openExternal", (_e, url) => shell.openExternal(url));
 
 function createWindow() {
   nativeTheme.themeSource = "dark";
-  if (process.platform === "darwin") app.dock?.setIcon(icon);
+  if (process.platform === "darwin" && icon) app.dock?.setIcon(icon);
   const win = new BrowserWindow({
     width: 1480,
     height: 920,

@@ -5,6 +5,7 @@
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
+    "postinstall": "install-electron",
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env VITE_DEV=1 electron .\"",
     "build": "vite build",
     "start": "vite build && electron .",
@@ -41,5 +42,8 @@
   },
   "productName": "Busscope",
   "description": "A desktop explorer for Azure Service Bus that understands what is inside your messages.",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  }
 }
