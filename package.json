@@ -1,0 +1,45 @@
+{
+  "name": "busscope",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env VITE_DEV=1 electron .\"",
+    "build": "vite build",
+    "start": "vite build && electron .",
+    "demo": "vite build && cross-env BUSSCOPE_DEMO=1 electron .",
+    "dev:demo": "concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env VITE_DEV=1 BUSSCOPE_DEMO=1 electron .\"",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@azure/arm-resources-subscriptions": "^3.0.0",
+    "@azure/arm-servicebus": "^7.0.0",
+    "@azure/identity": "^4.14.1",
+    "@azure/service-bus": "^7.10.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "@tanstack/react-virtual": "^3.14.26",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "@xyflow/react": "^13.0.2",
+    "concurrently": "^10.0.7",
+    "cross-env": "^10.1.0",
+    "electron": "^45.4.1",
+    "lucide-react": "^1.77.0",
+    "motion": "^14.14.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "wait-on": "^9.5.1"
+  },
+  "productName": "Busscope",
+  "description": "A desktop explorer for Azure Service Bus that understands what is inside your messages.",
+  "license": "MIT"
+}
