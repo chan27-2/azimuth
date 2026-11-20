@@ -340,3 +340,13 @@ function TipBubble({ rect, side, title, body }: { rect: DOMRect; side: "top" | "
     </motion.div>
   );
 }
+
+// ─── Checkbox (supports a mixed state for parent rows) ───────────────────────
+export function Checkbox({ checked, mixed, className }: { checked: boolean; mixed?: boolean; className?: string }) {
+  const on = checked || mixed;
+  return (
+    <span aria-hidden className={cn("flex size-3.5 shrink-0 items-center justify-center rounded-[4px] border transition-colors duration-150", on ? "border-fg bg-fg text-bg" : "border-line-2 bg-bg-1", className)}>
+      {mixed ? <span className="h-[1.5px] w-2 rounded-full bg-bg" /> : checked ? <Check className="size-2.5" strokeWidth={3.5} /> : null}
+    </span>
+  );
+}

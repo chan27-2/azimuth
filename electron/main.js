@@ -1,8 +1,14 @@
 import { app, BrowserWindow, ipcMain, shell, nativeTheme } from "electron";
 
 app.setName("Busscope");
+app.setAboutPanelOptions({
+  applicationName: "Busscope",
+  applicationVersion: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
+  version: "",
+  copyright: "MIT License",
+});
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as azure from "./azure.js";
 import { demo } from "./demo.js";
@@ -16,6 +22,7 @@ const handlers = {
   account: az.account,
   subscriptions: az.subscriptions,
   addAccount: az.addAccount,
+  cancelAddAccount: az.cancelAddAccount,
   namespaces: az.namespaces,
   entities: az.entities,
   access: az.access,

@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { AzureCliCredential } from "@azure/identity";
 import { ServiceBusManagementClient } from "@azure/arm-servicebus";
@@ -52,9 +52,31 @@ export async function subscriptions() {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// Runs `az login`, which opens the browser and adds an account alongside the existing ones.
-export async function addAccount() {
-  await run("az", ["login", "--only-show-errors", "-o", "none"], { timeout: 5 * 60_000 });
+// Runs `az login`, which opens the browser and adds an account alongside the existing ones. az can't tell
+// when the browser tab is closed, so the UI offers Cancel, which kills the process.
+let login = null;
+export function addAccount() {
+  if (login) return login.done;
+  const child = spawn("az", ["login", "--only-show-errors", "-o", "none"], { stdio: ["ignore", "ignore", "pipe"] });
+  let stderr = "";
+  child.stderr.on("data", (d) => (stderr += d));
+  const done = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => child.kill(), 5 * 60_000);
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      login = null;
+      if (code === 0) resolve(true);
+      else if (signal) reject(Object.assign(new Error("Sign-in cancelled."), { code: "CANCELLED" }));
+      else reject(new Error(stderr.trim().split("\n").pop() || `az login exited with code ${code}`));
+    });
+    child.on("error", (e) => { clearTimeout(timer); login = null; reject(e); });
+  });
+  login = { child, done };
+  return done;
+}
+
+export async function cancelAddAccount() {
+  login?.child.kill();
   return true;
 }
 

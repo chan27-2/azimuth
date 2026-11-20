@@ -10,6 +10,6 @@ const call = (name: string) => async (arg?: unknown) => {
   return r.data;
 };
 
-const names = ["account", "subscriptions", "addAccount", "namespaces", "entities", "access", "setConnectionString", "clearConnectionString", "peek"] as const;
+const names = ["account", "subscriptions", "addAccount", "cancelAddAccount", "namespaces", "entities", "access", "setConnectionString", "clearConnectionString", "peek"] as const;
 
 window.bus = { ...Object.fromEntries(names.map((n) => [n, call(n)])), openExternal: ipc.openExternal } as unknown as Window["bus"];

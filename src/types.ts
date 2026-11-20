@@ -38,6 +38,7 @@ declare global {
       account(): Promise<Account>;
       subscriptions(): Promise<Sub[]>;
       addAccount(): Promise<boolean>;
+      cancelAddAccount(): Promise<boolean>;
       access(ns: Namespace): Promise<Access>;
       setConnectionString(arg: { ns: Namespace; connectionString: string }): Promise<boolean>;
       clearConnectionString(arg: { ns: Namespace }): Promise<boolean>;

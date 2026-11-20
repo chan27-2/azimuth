@@ -30,7 +30,7 @@ You need Node 22.12 or newer and, for real data, the [Azure CLI](https://learn.m
 ```bash
 git clone https://github.com/chan27-2/busscope.git
 cd busscope
-npm install        # also downloads the Electron binary
+npm install        # also downloads Electron and names the dev bundle Busscope
 npm start          # builds the UI and opens the app
 ```
 
@@ -46,7 +46,7 @@ For development with hot reload: `npm run dev` (or `npm run dev:demo`).
 
 ## How it signs in
 
-Busscope uses your az CLI login. If `az` is signed in to more than one account or tenant (`az account list --all`), every subscription shows up, grouped by account, and Busscope asks `az` for each token as the account that owns that subscription. The person icon at the bottom of the sidebar runs `az login` to add another account.
+Busscope uses your az CLI login. If `az` is signed in to more than one account or tenant (`az account list --all`), every subscription shows up, grouped by account, and Busscope asks `az` for each token as the account that owns that subscription. The accounts menu at the bottom of the sidebar lets you tick which accounts and subscriptions appear, so a long list doesn't crowd the sidebar. It also has **Add account**, which runs `az login`; if you close the browser instead of signing in, press Cancel.
 
 Seeing counts and reading messages need different permissions:
 

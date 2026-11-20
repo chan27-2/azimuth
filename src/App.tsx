@@ -26,6 +26,10 @@ export function App() {
   const [cmd, setCmd] = useState(false);
   const [width, setWidth] = useState(() => stored("sidebar.width", 320));
   const [collapsed, setCollapsed] = useState(() => stored("sidebar.collapsed", false));
+  // Subscriptions the user unticked in the accounts menu. Stored per id so new subscriptions show up by default.
+  const [hidden, setHiddenState] = useState<string[]>(() => stored("sidebar.hiddenSubs", []));
+  const setHidden = (ids: string[]) => { setHiddenState(ids); store("sidebar.hiddenSubs", ids); };
+  const visibleSubs = subs.data?.filter((s) => !hidden.includes(s.id));
 
   const resize = (w: number) => { setWidth(w); store("sidebar.width", w); };
   const toggle = useCallback(() => setCollapsed((c) => { store("sidebar.collapsed", !c); return !c; }), []);
@@ -63,7 +67,10 @@ export function App() {
             collapsed={collapsed}
             onResize={resize}
             account={account.data}
-            subs={subs.data}
+            subs={visibleSubs ?? []}
+            allSubs={subs.data}
+            hidden={hidden}
+            onHiddenChange={setHidden}
             selectedNs={ns}
             selectedEntity={entity}
             onSelectNs={selectNs}
@@ -96,7 +103,7 @@ export function App() {
         <Button variant="ghost" size="icon" onClick={toggle} aria-label={collapsed ? "Show sidebar" : "Hide sidebar"} title="Toggle sidebar (⌘B)" className="no-drag fixed left-[76px] top-[10px] z-30">
           <PanelLeft />
         </Button>
-        {subs.data && <CommandMenu open={cmd} onClose={() => setCmd(false)} subs={subs.data} onNs={selectNs} onEntity={selectEntity} />}
+        {subs.data && <CommandMenu open={cmd} onClose={() => setCmd(false)} subs={visibleSubs ?? []} onNs={selectNs} onEntity={selectEntity} />}
       </div>
     </HeaderInset.Provider>
   );

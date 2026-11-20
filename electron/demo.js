@@ -102,6 +102,7 @@ export const demo = {
     { id: SUB_SIDE, name: "Side project", tenantId: "00000000-0000-4000-8000-0000000000bb", user: "you@example.com", isDefault: false },
   ],
   addAccount: async () => true,
+  cancelAddAccount: async () => true,
   access: async (n) => ({
     read: true,
     receive: n.name.includes("dev"),
