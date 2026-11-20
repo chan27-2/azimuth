@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 
 const SUB_PROD = "00000000-0000-4000-8000-000000000001";
 const SUB_DEV = "00000000-0000-4000-8000-000000000002";
+const SUB_SIDE = "00000000-0000-4000-8000-000000000003";
+const demoConnections = new Set();
 
 const ns = (name, sub, location) => ({
   id: `/subscriptions/${sub}/resourceGroups/${name}-rg/providers/Microsoft.ServiceBus/namespaces/${name}`,
@@ -15,6 +17,7 @@ const ns = (name, sub, location) => ({
 const NAMESPACES = {
   [SUB_PROD]: [ns("acme-prod-orders-sbns", SUB_PROD, "westeurope"), ns("acme-prod-billing-sbns", SUB_PROD, "westeurope")],
   [SUB_DEV]: [ns("acme-dev-orders-sbns", SUB_DEV, "uksouth"), ns("acme-preview-orders-sbns", SUB_DEV, "uksouth")],
+  [SUB_SIDE]: [ns("hobby-dev-events-sbns", SUB_SIDE, "eastus")],
 };
 
 const counts = (active, deadLetter, scheduled = 0) => ({ active, deadLetter, scheduled, transfer: 0 });
@@ -93,14 +96,37 @@ function message(i, kind, deadLetter) {
 
 export const demo = {
   account: async () => ({ demo: true, user: "demo@example.com", tenantId: "00000000-0000-0000-0000-000000000000", defaultSubscription: "Acme Production" }),
-  subscriptions: async () => [{ id: SUB_DEV, name: "Acme Development" }, { id: SUB_PROD, name: "Acme Production" }],
+  subscriptions: async () => [
+    { id: SUB_DEV, name: "Acme Development", tenantId: "00000000-0000-4000-8000-0000000000aa", user: "you@acme.example", isDefault: true },
+    { id: SUB_PROD, name: "Acme Production", tenantId: "00000000-0000-4000-8000-0000000000aa", user: "you@acme.example", isDefault: false },
+    { id: SUB_SIDE, name: "Side project", tenantId: "00000000-0000-4000-8000-0000000000bb", user: "you@example.com", isDefault: false },
+  ],
+  addAccount: async () => true,
+  access: async (n) => ({
+    read: true,
+    receive: n.name.includes("dev"),
+    listKeys: !n.name.includes("billing"),
+    connectionString: demoConnections.has(n.id),
+    scope: n.id,
+  }),
+  setConnectionString: async ({ ns: n, connectionString }) => {
+    if (!connectionString.includes(n.name)) throw new Error(`This connection string isn't for ${n.name}.`);
+    demoConnections.add(n.id);
+    return true;
+  },
+  clearConnectionString: async ({ ns: n }) => (demoConnections.delete(n.id), true),
   namespaces: async (subId) => NAMESPACES[subId] ?? [],
   entities: async (n) => estate(n.name),
   peek: async ({ ns: n, queue, topic, subscription, deadLetter, max = 250 }) => {
+    if (n.name.includes("billing") && !demoConnections.has(n.id)) {
+      const e = new Error(`You can see ${n.name}'s counts, but you don't have permission to read its messages.`);
+      e.code = "NO_ACCESS";
+      throw e;
+    }
     const e = estate(n.name);
     const c = queue ? e.queues.find((q) => q.name === queue)?.counts : e.topics.find((t) => t.name === topic)?.subscriptions.find((s) => s.name === subscription)?.counts;
     const total = Math.min(max, deadLetter ? c?.deadLetter ?? 0 : c?.active ?? 0);
     const seed = (queue ?? topic + subscription).length;
-    return { auth: n.name.includes("prod") ? "sas" : "entra", messages: Array.from({ length: total }, (_, i) => message(i, i + seed, deadLetter)) };
+    return { auth: demoConnections.has(n.id) ? "connection" : n.name.includes("dev") ? "entra" : "sas", messages: Array.from({ length: total }, (_, i) => message(i, i + seed, deadLetter)) };
   },
 };

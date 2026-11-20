@@ -6,7 +6,7 @@
 
 ![Topology of a Service Bus namespace](docs/topology.webp)
 
-Most Service Bus tools show a message body as a block of text. Busscope decodes it. It unwraps gzip, base64, CloudEvents and MassTransit envelopes, then shows the payload as a JSON tree, an XML tree, a CSV table or a hex dump, depending on what the bytes really contain. It signs in with your existing `az login`, finds every namespace you can see, and only peeks. It never locks, completes or moves a message.
+Most Service Bus tools show a message body as a block of text. Busscope decodes it. It unwraps gzip, base64, CloudEvents and MassTransit envelopes, then shows the payload as a JSON tree, an XML tree, a CSV table or a hex dump, depending on what the bytes really contain. It signs in with your existing `az login` (every account you're signed in to), finds every namespace you can see, and only peeks. It never locks, completes or moves a message.
 
 ## What it does
 
@@ -46,9 +46,20 @@ For development with hot reload: `npm run dev` (or `npm run dev:demo`).
 
 ## How it signs in
 
-Busscope uses `AzureCliCredential`, so it is whoever `az account show` says you are. It lists namespaces through Azure Resource Manager and peeks messages over AMQP.
+Busscope uses your az CLI login. If `az` is signed in to more than one account or tenant (`az account list --all`), every subscription shows up, grouped by account, and Busscope asks `az` for each token as the account that owns that subscription. The person icon at the bottom of the sidebar runs `az login` to add another account.
 
-Peeking needs the **Azure Service Bus Data Receiver** role (or Owner). If your identity doesn't have that role but does have management rights on the namespace (Contributor), Busscope falls back to reading the namespace's `RootManageSharedAccessKey` over ARM and peeking with it. The key stays in memory and the header shows a **SAS via ARM** badge whenever it's in use. If you'd rather not use the fallback, ask for the data role.
+Seeing counts and reading messages need different permissions:
+
+- **Counts, topics and filter rules** come from Azure Resource Manager. Reader is enough.
+- **Messages** come from the Service Bus data plane.
+
+Before peeking, Busscope asks Azure what you're allowed to do on the namespace and picks the first option that works:
+
+1. **A connection string you pasted** for that namespace. It's kept in memory and forgotten when you quit.
+2. **Your own identity**, if you have **Azure Service Bus Data Receiver** (or Owner).
+3. **The namespace's SAS key**, if you have management rights that let you read it (Contributor). The header then shows **SAS via ARM**.
+
+If none of these works, the namespace gets a lock icon in the sidebar. Opening one of its queues or subscriptions shows what's missing, a ready-made `az role assignment` command to send to an admin, and a box to paste a connection string instead.
 
 Busscope is read-only. It peeks, which doesn't lock messages or change delivery counts, and it has no send, resend, complete or purge actions.
 

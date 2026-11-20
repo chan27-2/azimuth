@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-type Entry<T> = { data?: T; error?: string; loading: boolean; at?: number; promise?: Promise<void> };
+export type QueryError = { message: string; code?: string; detail?: unknown };
+type Entry<T> = { data?: T; error?: QueryError; loading: boolean; at?: number; promise?: Promise<void> };
 const cache = new Map<string, Entry<unknown>>();
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
@@ -13,7 +14,10 @@ export function fetchQuery<T>(key: string, fn: () => Promise<T>, force = false) 
   if (cur?.data !== undefined && !force) return Promise.resolve();
   const promise = fn().then(
     (data) => { cache.set(key, { data, loading: false, at: Date.now() }); emit(); },
-    (e) => { cache.set(key, { ...cache.get(key), error: e?.message ?? String(e), loading: false, promise: undefined }); emit(); },
+    (e) => {
+      cache.set(key, { ...cache.get(key), error: { message: e?.message ?? String(e), code: e?.code, detail: e?.detail }, loading: false, promise: undefined });
+      emit();
+    },
   );
   cache.set(key, { ...cur, loading: true, error: undefined, promise });
   emit();
@@ -28,9 +32,14 @@ export function useQuery<T>(key: string | null, fn: () => Promise<T>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   const reload = useCallback(() => (key ? fetchQuery(key, fn, true) : Promise.resolve()), [key, fn]);
-  return { data: entry.data as T | undefined, error: entry.error, loading: entry.loading || (!!key && !entry.data && !entry.error), at: entry.at, reload };
+  return { data: entry.data as T | undefined, error: entry.error?.message, errorInfo: entry.error, loading: entry.loading || (!!key && !entry.data && !entry.error), at: entry.at, reload };
 }
 
 export function peekCache<T>(key: string) {
   return (cache.get(key) as Entry<T> | undefined)?.data;
+}
+
+export function invalidate(prefix: string) {
+  for (const k of [...cache.keys()]) if (k.startsWith(prefix)) cache.delete(k);
+  emit();
 }

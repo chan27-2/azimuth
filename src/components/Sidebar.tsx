@@ -1,10 +1,10 @@
 import { useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Box, ChevronRight, Inbox, Layers, Network, Search } from "lucide-react";
-import type { Account, EntityRef, Namespace, Sub, Entities } from "../types";
-import { useQuery } from "../lib/query";
+import { Box, ChevronRight, CircleSlash, Inbox, Layers, Lock, Network, Search, UserPlus } from "lucide-react";
+import { canRead, type Access, type Account, type EntityRef, type Namespace, type Sub, type Entities } from "../types";
+import { fetchQuery, invalidate, useQuery } from "../lib/query";
 import { cn, envOf } from "../lib/util";
-import { Count, EnvBadge, Kbd, Spinner, Tip } from "./ui";
+import { Button, Count, EnvBadge, Kbd, Spinner, Tip } from "./ui";
 import { Logo } from "./Logo";
 import * as G from "../lib/glossary";
 
@@ -50,17 +50,11 @@ export function Sidebar(p: Props & { width: number; collapsed: boolean; onResize
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
-          {p.subs.map((s) => <SubGroup key={s.id} sub={s} {...p} />)}
+          {accounts(p.subs).length > 1
+            ? accounts(p.subs).map(([user, owned]) => <AccountSection key={user} user={user} owned={owned} {...p} />)
+            : p.subs.map((s) => <SubGroup key={s.id} sub={s} {...p} />)}
         </nav>
-        {p.account && (
-          <div className="flex h-14 shrink-0 items-center gap-2.5 border-t border-line px-4">
-            <span className="flex size-7 items-center justify-center rounded-full border border-line-2 bg-bg-2 text-[11px] font-semibold uppercase text-fg-2">{p.account.user.slice(0, 1)}</span>
-            <div className="min-w-0 leading-tight">
-              <div className="truncate text-[12px] text-fg-2">{p.account.user}</div>
-              <div className="text-[11px] text-fg-3">{p.account.demo ? "Demo data, not a real tenant" : "Signed in via az CLI"}</div>
-            </div>
-          </div>
-        )}
+        {p.account && <Footer account={p.account} subs={p.subs} />}
       </div>
       {!p.collapsed && (
         <div
@@ -84,6 +78,69 @@ export function Sidebar(p: Props & { width: number; collapsed: boolean; onResize
         </div>
       )}
     </motion.aside>
+  );
+}
+
+const accounts = (subs: Sub[]) => {
+  const m = new Map<string, Sub[]>();
+  for (const s of subs) m.set(s.user ?? "unknown", [...(m.get(s.user ?? "unknown") ?? []), s]);
+  return [...m.entries()];
+};
+
+const Avatar = ({ name, className }: { name: string; className?: string }) => (
+  <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full border border-line-2 bg-bg-2 text-[10px] font-semibold uppercase text-fg-2", className)}>{name.slice(0, 1)}</span>
+);
+
+function AccountSection({ user, owned, ...p }: { user: string; owned: Sub[] } & Props) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="mt-3 border-b border-line/60 pb-2 last:border-0">
+      <Tip content={{ title: user, body: `${owned.length} subscription${owned.length === 1 ? "" : "s"} in tenant ${owned[0]?.tenantId ?? "unknown"}. ${G.access.noAccount}` }} side="right" block>
+        <button onClick={() => setOpen(!open)} className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-[12px] text-fg-2 transition-colors duration-150 hover:bg-bg-2 hover:text-fg">
+          <Avatar name={user} className="size-5 text-[9px]" />
+          <span className="min-w-0 flex-1 truncate">{user}</span>
+          <Chevron open={open} />
+        </button>
+      </Tip>
+      <Disclosure open={open}>{owned.map((s) => <SubGroup key={s.id} sub={s} {...p} />)}</Disclosure>
+    </div>
+  );
+}
+
+function Footer({ account, subs }: { account: Account; subs: Sub[] }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const users = accounts(subs).map(([u]) => u);
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await window.bus.addAccount();
+      invalidate("ns:");
+      await fetchQuery("subs", () => window.bus.subscriptions(), true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="shrink-0 border-t border-line px-3 py-2.5">
+      <div className="flex items-center gap-2.5">
+        <div className="flex -space-x-1.5 pl-1">{users.slice(0, 3).map((u) => <Avatar key={u} name={u} className="size-7 text-[11px] ring-2 ring-bg" />)}</div>
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="truncate text-[12px] text-fg-2">{users.length > 1 ? `${users.length} accounts` : account.user}</div>
+          <div className="text-[11px] text-fg-3">{account.demo ? "Demo data, not a real tenant" : "Signed in via az CLI"}</div>
+        </div>
+        {!account.demo && (
+          <Tip content={{ title: "Add an Azure account", body: "Runs az login, which opens your browser. The new account is added alongside the ones you already have, and its subscriptions appear here." }} side="top">
+            <Button variant="ghost" size="icon" aria-label="Add account" onClick={add} disabled={busy}>{busy ? <Spinner className="size-3" /> : <UserPlus />}</Button>
+          </Tip>
+        )}
+      </div>
+      {busy && <div className="mt-2 text-[11px] text-fg-3">Finish signing in in your browser…</div>}
+      {error && <div className="mt-2 text-[11px] text-bad">{error}</div>}
+    </div>
   );
 }
 
@@ -116,7 +173,13 @@ function SubGroup({ sub, ...p }: { sub: Sub } & Props) {
         <span className="truncate">{sub.name}</span>
         <span className="ml-auto tabular">{q.loading ? <Spinner className="size-3" /> : q.data?.length}</span>
       </button>
-      {q.error && <div className="px-3 py-1 text-[12px] text-bad">{q.error}</div>}
+      {q.errorInfo?.code === "SUBSCRIPTION_NOT_FOUND" ? (
+        <Tip content={{ title: "Subscription not found", body: q.error }} side="right" block>
+          <div className="flex h-7 items-center gap-2 pl-7 text-[12px] text-fg-3"><CircleSlash className="size-3.5" />No longer exists in Azure</div>
+        </Tip>
+      ) : (
+        q.error && <div className="px-3 py-1 text-[12px] text-bad">{q.error}</div>
+      )}
       <Disclosure open={open && !!q.data}>
         <div className="mt-0.5 space-y-px">
           {[...(q.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((ns) => <NsItem key={ns.id} ns={ns} {...p} />)}
@@ -133,6 +196,8 @@ function NsItem({ ns, selectedNs, selectedEntity, onSelectNs, onSelectEntity }: 
   const [expanded, setExpanded] = useState<boolean | null>(null);
   const open = expanded ?? active;
   const env = envOf(ns.name);
+  const acc = useQuery<Access>(`access:${ns.id}`, () => window.bus.access(ns));
+  const locked = acc.data && !canRead(acc.data);
   return (
     <div>
       <div className={cn(rowBase, "pr-2", active && !selectedEntity ? "bg-bg-3 text-fg" : "text-fg-2 hover:bg-bg-2 hover:text-fg")}>
@@ -142,6 +207,7 @@ function NsItem({ ns, selectedNs, selectedEntity, onSelectNs, onSelectEntity }: 
         <button onClick={() => { onSelectNs(ns); setExpanded(true); }} className="flex h-full min-w-0 flex-1 items-center gap-2">
           <Network className={cn("size-3.5 shrink-0", env === "prod" ? "text-bad" : "text-fg-3")} />
           <span title={ns.name} className="min-w-0 flex-1 truncate">{ns.name}</span>
+          {locked && <Tip content={G.access.locked} side="right"><Lock className="size-3.5 shrink-0 text-fg-3" aria-label="Counts only" /></Tip>}
           <Tip content={G.env[env]} side="right"><EnvBadge env={env} /></Tip>
         </button>
       </div>

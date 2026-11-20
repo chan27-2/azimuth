@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Box, ChevronRight, GitCompare, Inbox, KeyRound, Layers, Network, RefreshCw, ShieldCheck, Skull, X } from "lucide-react";
-import type { Entities, EntityRef, Message } from "../types";
-import { useQuery, peekCache } from "../lib/query";
+import { Box, ChevronRight, GitCompare, Inbox, KeyRound, Layers, Lock, Network, RefreshCw, ShieldCheck, Skull, X } from "lucide-react";
+import { canRead, type Access, type Auth, type Entities, type EntityRef, type Message, type Sub } from "../types";
+import { fetchQuery, useQuery, peekCache } from "../lib/query";
+import { AccessPanel } from "./AccessPanel";
 import { b64ToBytes, detect, type Detection } from "../lib/detect";
 import { ago, cn, envOf, fmtTime } from "../lib/util";
 import { AnimatedNumber, Button, Chip, Empty, EnvBadge, Field, Header, NoDrag, Select, Spinner, Tabs, Tip } from "./ui";
@@ -11,7 +12,7 @@ import * as G from "../lib/glossary";
 import { MessageDetail } from "./MessageDetail";
 
 export type Item = { msg: Message; det: Detection };
-type Peeked = { auth: "entra" | "sas"; items: Item[]; at: number };
+type Peeked = { auth: Auth; items: Item[]; at: number };
 
 const refKey = (r: EntityRef) => (r.kind === "queue" ? `${r.ns.id}|q|${r.queue}` : `${r.ns.id}|s|${r.topic}|${r.subscription}`);
 
@@ -25,7 +26,12 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
 
   const [dlq, setDlq] = useState<boolean>(entity.dlq ?? (!!counts && counts.active === 0 && counts.deadLetter > 0));
   const [max, setMax] = useState(250);
-  const key = `peek:${refKey(entity)}|${dlq ? "dlq" : "active"}|${max}`;
+  const accessKey = `access:${entity.ns.id}`;
+  const access = useQuery<Access>(accessKey, () => window.bus.access(entity.ns));
+  const refreshAccess = () => fetchQuery(accessKey, () => window.bus.access(entity.ns), true);
+  // Don't peek until we know we're allowed to; if the permission check itself fails, try anyway.
+  const allowed = access.data ? canRead(access.data) : !!access.error;
+  const key = allowed ? `peek:${refKey(entity)}|${dlq ? "dlq" : "active"}|${max}|${access.data?.connectionString ? "cs" : "id"}` : null;
   const q = useQuery<Peeked>(key, async () => {
     const r = await window.bus.peek({
       ns: entity.ns,
@@ -73,6 +79,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
   const sel = filtered.find((i) => i.msg.sequenceNumber === selected) ?? filtered[0] ?? null;
   const cmp = compare ? items.find((i) => i.msg.sequenceNumber === compare) ?? null : null;
 
+  const blocked = (access.data && !canRead(access.data)) || q.errorInfo?.code === "NO_ACCESS";
   const Icon = entity.kind === "queue" ? Inbox : Box;
   const title = entity.kind === "queue" ? entity.queue : entity.subscription;
 
@@ -107,10 +114,20 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
         <NoDrag className="ml-auto shrink-0 pl-2">
           {q.data && (
             <Tip content={G.auth[q.data.auth]} side="bottom">
-              <Chip tone={q.data.auth === "entra" ? "ok" : "warn"} className="h-8 cursor-help px-2.5" >
+              <Chip tone={q.data.auth === "entra" ? "ok" : q.data.auth === "connection" ? "accent" : "warn"} className={cn("h-8 cursor-help px-2.5", q.data.auth === "connection" && "pr-1")}>
                 {q.data.auth === "entra" ? <ShieldCheck /> : <KeyRound />}
-                <span className="hidden min-[1600px]:inline">{q.data.auth === "entra" ? "Entra ID" : "SAS via ARM"}</span>
+                <span className="hidden min-[1600px]:inline">{{ entra: "Entra ID", sas: "SAS via ARM", connection: "Connection string" }[q.data.auth]}</span>
+                {q.data.auth === "connection" && (
+                  <Button variant="ghost" size="icon-sm" aria-label="Forget connection string" className="text-accent hover:text-accent" onClick={async () => { await window.bus.clearConnectionString({ ns: entity.ns }); refreshAccess(); }}>
+                    <X />
+                  </Button>
+                )}
               </Chip>
+            </Tip>
+          )}
+          {blocked && (
+            <Tip content={G.access.locked} side="bottom">
+              <Chip className="h-8 cursor-help px-2.5"><Lock /><span className="hidden min-[1600px]:inline">Counts only</span></Chip>
             </Tip>
           )}
           <Tabs
@@ -127,8 +144,17 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
         </NoDrag>
       </Header>
 
-      {q.error && <div className="border-b border-bad/20 bg-bad/[0.06] px-5 py-2 text-[12px] text-bad">{q.error}</div>}
+      {q.error && !blocked && <div className="border-b border-bad/20 bg-bad/[0.06] px-5 py-2 text-[12px] text-bad">{q.error}</div>}
 
+      {blocked ? (
+        <AccessPanel
+          ns={entity.ns}
+          access={access.data ?? (q.errorInfo?.detail as Access)}
+          rejected={q.errorInfo?.code === "NO_ACCESS"}
+          user={peekCache<Sub[]>("subs")?.find((s) => s.id === entity.ns.subscriptionId)?.user}
+          onConnected={refreshAccess}
+        />
+      ) : (
       <div className="flex min-h-0 flex-1">
         <section className="flex w-[400px] shrink-0 flex-col border-r border-line">
           <div className="space-y-3 border-b border-line p-3">
@@ -182,6 +208,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
           </AnimatePresence>
         </section>
       </div>
+      )}
     </div>
   );
 }

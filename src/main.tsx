@@ -1,3 +1,4 @@
+import "./lib/bus";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
 import "@fontsource-variable/geist";

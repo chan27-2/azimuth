@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { BaseEdge, Background, BackgroundVariant, Controls, EdgeLabelRenderer, getBezierPath, Handle, Position, ReactFlow, useNodesState, type Edge, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Box, Inbox, Layers, Network, RefreshCw, Skull } from "lucide-react";
-import type { Entities, EntityRef, Namespace } from "../types";
+import { AlertTriangle, Box, Inbox, Layers, Lock, Network, RefreshCw, Skull } from "lucide-react";
+import { canRead, type Access, type Entities, type EntityRef, type Namespace } from "../types";
 import { useQuery } from "../lib/query";
 import { ago, cn, envOf } from "../lib/util";
 import { AnimatedNumber, Button, EnvBadge, Header, NoDrag, Spinner, Tip, type TipContent } from "./ui";
@@ -10,6 +10,7 @@ import * as G from "../lib/glossary";
 export function Overview({ ns, onSelect }: { ns: Namespace; onSelect: (e: EntityRef) => void }) {
   const q = useQuery<Entities>(`ent:${ns.id}`, () => window.bus.entities(ns));
   const env = envOf(ns.name);
+  const access = useQuery<Access>(`access:${ns.id}`, () => window.bus.access(ns));
   const totals = useMemo(() => {
     const t = { topics: 0, subs: 0, queues: 0, active: 0, dlq: 0 };
     if (!q.data) return t;
@@ -35,6 +36,13 @@ export function Overview({ ns, onSelect }: { ns: Namespace; onSelect: (e: Entity
       {env === "prod" && (
         <div className="flex h-9 shrink-0 items-center gap-2 border-b border-bad/20 bg-bad/[0.06] px-5 text-[12px] text-bad">
           <AlertTriangle className="size-3.5" /> Production namespace. Busscope only peeks, so no message is locked, completed or moved.
+        </div>
+      )}
+      {access.data && !canRead(access.data) && (
+        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line bg-bg-1 px-5 text-[12px] text-fg-2">
+          <Lock className="size-3.5 text-fg-3" />
+          <span>Counts only. You can read this namespace but not its messages.</span>
+          <Tip content={G.access.locked} side="bottom"><span className="cursor-help text-fg-3 underline decoration-line-2 decoration-dotted underline-offset-4">Why?</span></Tip>
         </div>
       )}
       <div className="grid shrink-0 grid-cols-5 divide-x divide-line border-b border-line">

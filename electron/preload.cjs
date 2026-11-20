@@ -1,14 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
-const call = (name) => async (arg) => {
-  const r = await ipcRenderer.invoke(name, arg);
-  if (!r.ok) throw new Error(r.error);
-  return r.data;
-};
-contextBridge.exposeInMainWorld("bus", {
-  account: call("account"),
-  subscriptions: call("subscriptions"),
-  namespaces: call("namespaces"),
-  entities: call("entities"),
-  peek: call("peek"),
+// Errors lose their custom fields (code, detail) when thrown across the context bridge, so results
+// cross as plain { ok, data | error, code, detail } objects and src/lib/bus.ts turns them back into errors.
+contextBridge.exposeInMainWorld("busIpc", {
+  invoke: (name, arg) => ipcRenderer.invoke(name, arg),
   openExternal: (url) => ipcRenderer.invoke("openExternal", url),
 });

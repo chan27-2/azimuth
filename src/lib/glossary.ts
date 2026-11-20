@@ -12,8 +12,24 @@ export const env: Record<Env, Entry> = {
   other: { title: "" },
 };
 
+export const access = {
+  locked: {
+    title: "Counts only",
+    body: "You can read this namespace through Azure Resource Manager, which is where the counts come from. Reading messages is a separate data-plane permission you don't have here. Open a queue or subscription to see your options.",
+  },
+  whyCounts: "Counts, topics and filter rules come from Azure Resource Manager, which a Reader role can see. Message bodies come from the Service Bus data plane, which needs its own permission.",
+  role: "Azure Service Bus Data Receiver",
+  roleWhy: "A built-in role that lets you peek and receive messages, and nothing else. Scoped to this namespace, it doesn't touch anything else in the subscription.",
+  connWhy: "A shared access policy with Listen rights, e.g. from Key Vault or the namespace's “Shared access policies” page. Busscope keeps it in memory until you quit and never writes it to disk.",
+  noAccount: "This subscription came from a different az account. Busscope asks az for a token as that account.",
+};
+
 export const auth = {
   entra: { title: "Signed in with Entra ID", body: "Your az CLI identity has a Service Bus data role on this namespace, so Busscope reads messages as you." },
+  connection: {
+    title: "Using your connection string",
+    body: "You pasted a connection string for this namespace. It's kept in memory until you quit Busscope. Click × to forget it now.",
+  },
   sas: {
     title: "Using a SAS key read over ARM",
     body: "Your identity has no Service Bus data role here, so Busscope used your management (Contributor) access to read the namespace's RootManageSharedAccessKey and peek with it. The key stays in memory. Ask for “Azure Service Bus Data Receiver” to use Entra instead.",

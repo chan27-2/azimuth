@@ -15,8 +15,12 @@ const az = process.env.BUSSCOPE_DEMO ? demo : azure;
 const handlers = {
   account: az.account,
   subscriptions: az.subscriptions,
+  addAccount: az.addAccount,
   namespaces: az.namespaces,
   entities: az.entities,
+  access: az.access,
+  setConnectionString: az.setConnectionString,
+  clearConnectionString: az.clearConnectionString,
   peek: az.peek,
 };
 const iconPath = path.join(__dirname, "../brand/icon-1024.png");
@@ -26,7 +30,7 @@ for (const [name, fn] of Object.entries(handlers)) {
     try {
       return { ok: true, data: await fn(arg) };
     } catch (e) {
-      return { ok: false, error: e?.message ?? String(e) };
+      return { ok: false, error: e?.message ?? String(e), code: e?.code, detail: e?.detail };
     }
   });
 }

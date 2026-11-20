@@ -1,5 +1,5 @@
 export type Account = { user: string; tenantId: string; defaultSubscription: string; demo?: boolean };
-export type Sub = { id: string; name: string };
+export type Sub = { id: string; name: string; tenantId?: string; user?: string; isDefault?: boolean };
 export type Namespace = {
   id: string; name: string; subscriptionId: string; resourceGroup: string;
   location: string; sku: string; endpoint: string; status: string;
@@ -23,7 +23,10 @@ export type Message = {
   deliveryCount: number; state: string; deadLetterReason: string | null; deadLetterErrorDescription: string | null;
   deadLetterSource: string | null; applicationProperties: Record<string, unknown>; bodyType: string; size: number; body: string;
 };
-export type PeekResult = { auth: "entra" | "sas"; messages: Message[] };
+export type Auth = "entra" | "sas" | "connection";
+export type PeekResult = { auth: Auth; messages: Message[] };
+export type Access = { read: boolean; receive: boolean; listKeys: boolean; connectionString: boolean; scope: string };
+export const canRead = (a: Access) => a.receive || a.listKeys || a.connectionString;
 
 export type EntityRef =
   | { kind: "queue"; ns: Namespace; queue: string; dlq?: boolean }
@@ -34,6 +37,10 @@ declare global {
     bus: {
       account(): Promise<Account>;
       subscriptions(): Promise<Sub[]>;
+      addAccount(): Promise<boolean>;
+      access(ns: Namespace): Promise<Access>;
+      setConnectionString(arg: { ns: Namespace; connectionString: string }): Promise<boolean>;
+      clearConnectionString(arg: { ns: Namespace }): Promise<boolean>;
       namespaces(subId: string): Promise<Namespace[]>;
       entities(ns: Namespace): Promise<Entities>;
       peek(arg: { ns: Namespace; queue?: string; topic?: string; subscription?: string; deadLetter?: boolean; max?: number }): Promise<PeekResult>;
