@@ -171,7 +171,7 @@ export function Tabs<T extends string>({ value, onChange, items, id }: { value: 
           role="tab"
           aria-selected={value === it.value}
           onClick={() => onChange(it.value)}
-          className={cn("relative h-full rounded-[4px] px-2.5 text-[12px] font-medium transition-colors duration-150 [&_svg]:size-3.5", ring, value === it.value ? "text-fg" : "text-fg-3 hover:text-fg-2")}
+          className={cn("relative h-full whitespace-nowrap rounded-[4px] px-2.5 text-[12px] font-medium transition-colors duration-150 [&_svg]:size-3.5", ring, value === it.value ? "text-fg" : "text-fg-3 hover:text-fg-2")}
         >
           {value === it.value && <motion.span layoutId={`tab-${id}`} className="absolute inset-0 rounded-[4px] bg-bg-3 shadow-[0_1px_2px_rgba(0,0,0,0.4)]" transition={{ type: "spring", bounce: 0.12, duration: 0.3 }} />}
           <span className="relative flex items-center gap-1.5">{it.label}</span>

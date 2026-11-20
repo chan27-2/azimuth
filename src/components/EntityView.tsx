@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Box, GitCompare, Inbox, KeyRound, RefreshCw, ShieldCheck, Skull, X } from "lucide-react";
+import { Box, ChevronRight, GitCompare, Inbox, KeyRound, Layers, Network, RefreshCw, ShieldCheck, Skull, X } from "lucide-react";
 import type { Entities, EntityRef, Message } from "../types";
 import { useQuery, peekCache } from "../lib/query";
 import { b64ToBytes, detect, type Detection } from "../lib/detect";
@@ -15,7 +15,7 @@ type Peeked = { auth: "entra" | "sas"; items: Item[]; at: number };
 
 const refKey = (r: EntityRef) => (r.kind === "queue" ? `${r.ns.id}|q|${r.queue}` : `${r.ns.id}|s|${r.topic}|${r.subscription}`);
 
-export function EntityView({ entity }: { entity: EntityRef }) {
+export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () => void }) {
   const ents = peekCache<Entities>(`ent:${entity.ns.id}`);
   const counts = useMemo(() => {
     if (!ents) return null;
@@ -79,19 +79,37 @@ export function EntityView({ entity }: { entity: EntityRef }) {
   return (
     <div className="flex h-full flex-col">
       <Header>
-        <Icon className="size-4 shrink-0 text-fg-3" />
-        <div className="flex min-w-0 items-baseline gap-1.5">
-          <span className="hidden truncate text-[13px] text-fg-3 xl:inline">{entity.ns.name} /</span>
-          {entity.kind === "subscription" && <span className="truncate text-[13px] text-fg-3">{entity.topic} /</span>}
-          <h1 className="truncate text-[14px] font-semibold tracking-tight">{title}</h1>
-        </div>
+        <nav aria-label="Breadcrumb" className="no-drag -ml-1.5 flex min-w-0 items-center gap-1 text-[13px]">
+          <Tip content={{ title: `Back to ${entity.ns.name}`, body: "Topology and totals for the whole namespace. Shortcut: ⌘[" }} side="bottom" className="min-w-[56px] shrink-[4]">
+            <button onClick={onBack} className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-fg-3 transition-colors duration-150 hover:bg-bg-2 hover:text-fg">
+              <Network className="size-3.5 shrink-0" />
+              <span className="truncate">{entity.ns.name}</span>
+            </button>
+          </Tip>
+          <ChevronRight className="size-3.5 shrink-0 text-line-2" />
+          {entity.kind === "subscription" && (
+            <>
+              <Tip content={{ title: `Topic · ${entity.topic}`, body: "Opens the namespace, where this topic and all its subscriptions are drawn." }} side="bottom" className="min-w-[56px] shrink-[2]">
+                <button onClick={onBack} className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-fg-3 transition-colors duration-150 hover:bg-bg-2 hover:text-fg">
+                  <Layers className="size-3.5 shrink-0" />
+                  <span className="truncate">{entity.topic}</span>
+                </button>
+              </Tip>
+              <ChevronRight className="size-3.5 shrink-0 text-line-2" />
+            </>
+          )}
+          <h1 title={title} className="flex min-w-[80px] shrink items-center gap-1.5 px-1.5 text-[14px] font-semibold tracking-tight">
+            <Icon className="size-3.5 shrink-0 text-fg-3" />
+            <span className="truncate">{title}</span>
+          </h1>
+        </nav>
         <Tip content={G.env[envOf(entity.ns.name)]} side="bottom"><EnvBadge env={envOf(entity.ns.name)} /></Tip>
-        <NoDrag className="ml-auto">
+        <NoDrag className="ml-auto shrink-0 pl-2">
           {q.data && (
             <Tip content={G.auth[q.data.auth]} side="bottom">
-              <Chip tone={q.data.auth === "entra" ? "ok" : "warn"} className="h-8 cursor-help">
+              <Chip tone={q.data.auth === "entra" ? "ok" : "warn"} className="h-8 cursor-help px-2.5" >
                 {q.data.auth === "entra" ? <ShieldCheck /> : <KeyRound />}
-                {q.data.auth === "entra" ? "Entra ID" : "SAS via ARM"}
+                <span className="hidden min-[1600px]:inline">{q.data.auth === "entra" ? "Entra ID" : "SAS via ARM"}</span>
               </Chip>
             </Tip>
           )}

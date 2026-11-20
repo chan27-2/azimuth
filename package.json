@@ -5,7 +5,7 @@
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
-    "postinstall": "install-electron",
+    "postinstall": "install-electron && node scripts/brand-electron.mjs",
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env VITE_DEV=1 electron .\"",
     "build": "vite build",
     "start": "vite build && electron .",

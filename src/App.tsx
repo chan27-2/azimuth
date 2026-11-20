@@ -35,6 +35,7 @@ export function App() {
       if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key.toLowerCase() === "k") { e.preventDefault(); setCmd((o) => !o); }
       if (e.key.toLowerCase() === "b") { e.preventDefault(); toggle(); }
+      if (e.key === "[") { e.preventDefault(); setEntity(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -78,7 +79,7 @@ export function App() {
           <AnimatePresence mode="wait">
             <motion.div key={entity ? refKey(entity) : ns?.id ?? "home"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }} className="h-full">
               {entity ? (
-                <EntityView entity={entity} />
+                <EntityView entity={entity} onBack={() => selectNs(entity.ns)} />
               ) : ns ? (
                 <Overview ns={ns} onSelect={selectEntity} />
               ) : (
