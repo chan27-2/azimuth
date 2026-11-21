@@ -5,11 +5,13 @@ import { AlertTriangle, Box, Inbox, Layers, Lock, Network, RefreshCw, Skull } fr
 import { canRead, type Access, type Entities, type EntityRef, type Namespace } from "../../types";
 import { useQuery } from "../../lib/query";
 import { ago, cn, envOf } from "../../lib/util";
-import { AnimatedNumber, Button, EnvBadge, Header, NoDrag, Spinner, Tip, type TipContent } from "../../ui/ui";
+import { AnimatedNumber, Breadcrumbs, Button, EnvBadge, Header, NoDrag, Spinner, Tip, type TipContent } from "../../ui/ui";
+import { useNav } from "../../shell/nav";
 import * as G from "../../lib/glossary";
 
 export function Overview({ ns, onSelect }: { ns: Namespace; onSelect: (e: EntityRef) => void }) {
   const q = useQuery<Entities>(`ent:${ns.id}`, () => api.sb.entities(ns));
+  const { go } = useNav();
   const env = envOf(ns.name);
   const access = useQuery<Access>(`access:${ns.id}`, () => api.sb.access(ns));
   const totals = useMemo(() => {
@@ -25,8 +27,7 @@ export function Overview({ ns, onSelect }: { ns: Namespace; onSelect: (e: Entity
   return (
     <div className="flex h-full flex-col">
       <Header>
-        <Network className="size-4 shrink-0 text-fg-3" />
-        <h1 className="truncate text-[14px] font-semibold tracking-tight">{ns.name}</h1>
+        <Breadcrumbs items={[{ label: "Service Bus", onClick: () => go({ tool: "sb", ns: undefined }), tip: { title: "Service Bus", body: "All namespaces." } }, { label: ns.name, icon: <Network /> }]} />
         <Tip content={G.env[env]} side="bottom"><EnvBadge env={env} /></Tip>
         <span className="hidden truncate text-[12px] text-fg-3 lg:block">{ns.location} · {ns.sku} · {ns.resourceGroup}</span>
         <NoDrag className="ml-auto">

@@ -3,7 +3,7 @@
 import { animate, motion, useMotionValue, useTransform, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { createContext, forwardRef, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
-import { Check, ChevronDown, Copy, PanelLeft, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, PanelLeft, Search, X } from "lucide-react";
 import { isMac, isWindows, mod } from "../lib/platform";
 import { cn, copy, compact, type Env } from "../lib/util";
 
@@ -301,6 +301,39 @@ export function Header({ children }: { children: ReactNode }) {
     </header>
   );
 }
+// ─── Breadcrumbs ─────────────────────────────────────────────────────────────
+// Every level but the last is a button back to it. Earlier levels give up space first when it's tight.
+export type Crumb = { label: string; icon?: ReactNode; onClick?: () => void; tip?: TipContent };
+export function Breadcrumbs({ items }: { items: Crumb[] }) {
+  return (
+    <nav aria-label="Breadcrumb" className="no-drag -ml-1.5 flex min-w-0 items-center gap-0.5 text-[13px]">
+      {items.map((c, i) => {
+        const last = i === items.length - 1;
+        const inner = (
+          <>
+            {c.icon && <span className="flex shrink-0 text-fg-3 [&_svg]:size-3.5">{c.icon}</span>}
+            <span className="truncate">{c.label}</span>
+          </>
+        );
+        return (
+          <span key={i} className={cn("flex min-w-0 items-center gap-0.5", last ? "shrink" : i === 0 ? "shrink-[6]" : "shrink-[3]")} style={{ minWidth: last ? 72 : 40 }}>
+            {last ? (
+              <h1 title={c.label} className="flex min-w-0 items-center gap-1.5 px-1.5 text-[14px] font-semibold tracking-tight text-fg">{inner}</h1>
+            ) : (
+              <Tip content={c.tip ?? { title: `Back to ${c.label}` }} side="bottom" className="min-w-0">
+                <button onClick={c.onClick} disabled={!c.onClick} title={c.label} className={cn("flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-fg-3 transition-colors duration-150 enabled:hover:bg-bg-2 enabled:hover:text-fg", ring)}>
+                  {inner}
+                </button>
+              </Tip>
+            )}
+            {!last && <ChevronRight className="size-3.5 shrink-0 text-line-2" />}
+          </span>
+        );
+      })}
+    </nav>
+  );
+}
+
 export const NoDrag = ({ children, className }: { children: ReactNode; className?: string }) => <div className={cn("no-drag flex items-center gap-2", className)}>{children}</div>;
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────────

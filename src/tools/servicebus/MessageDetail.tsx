@@ -12,6 +12,14 @@ import { XmlTree } from "../../ui/viewers/XmlTree";
 import { HexView } from "../../ui/viewers/HexView";
 import { CsvTable } from "../../ui/viewers/CsvTable";
 import { DiffView } from "../../ui/viewers/DiffView";
+import { ResizeHandle, useStoredSize } from "../../ui/resize";
+import { SmartText, parseText } from "../../ui/SmartText";
+
+// A property value: short plain values inline; JSON, XML or SQL inside a value gets formatted.
+function Value({ text }: { text: string }) {
+  const formatted = text.length > 2 && parseText(text).some((p) => p.kind !== "text");
+  return formatted ? <SmartText text={text} className="py-1.5" maxHeight={260} /> : <span className="selectable break-all py-2 font-mono text-[12px] text-fg">{text}</span>;
+}
 
 type View = "smart" | "raw" | "hex" | "props" | "diff";
 
@@ -212,6 +220,7 @@ function Pipeline({ det, bodyType, size }: { det: Detection; bodyType: string; s
 }
 
 function Envelope({ title, tip, data, onCopy }: { title: string; tip: TipContent; data: Record<string, unknown>; onCopy: Notify }) {
+  const [keyW, setKeyW, resetKeyW] = useStoredSize("sb.envelope.key", 160);
   const entries = Object.entries(data);
   return (
     <div className="mb-4 overflow-hidden rounded-lg border border-line">
@@ -223,9 +232,9 @@ function Envelope({ title, tip, data, onCopy }: { title: string; tip: TipContent
         {entries.map(([k, v]) => {
           const val = typeof v === "object" ? JSON.stringify(v) : String(v);
           return (
-            <div key={k} className="group grid grid-cols-[160px_1fr_auto] items-center gap-x-4 pl-3 pr-1.5 hover:bg-white/[0.02]">
-              <span className="truncate py-1 text-fg-3">{k}</span>
-              <span className="break-all py-1 text-fg">{val}</span>
+            <div key={k} className="group grid items-center gap-x-4 pl-3 pr-1.5 hover:bg-white/[0.02]" style={{ gridTemplateColumns: `${keyW}px 1fr auto` }}>
+              <span className="relative truncate py-1 pr-2 text-fg-3" title={k}>{k}<ResizeHandle size={keyW} onSize={setKeyW} onReset={resetKeyW} min={80} max={480} label="Resize key column" /></span>
+              <Value text={val} />
               <Tip content={`Copy ${k}`}><Button variant="ghost" size="icon-sm" aria-label={`Copy ${k}`} onClick={() => onCopy(k, val)} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"><ClipboardCopy /></Button></Tip>
             </div>
           );
@@ -240,7 +249,7 @@ function SmartBody({ det, query, onCopy }: { det: Detection; query: string; onCo
     case "json": return <JsonTree value={det.json} query={query} onCopy={onCopy} />;
     case "xml": return <XmlTree doc={det.xml!} query={query} />;
     case "csv": return <CsvTable rows={det.csv!.rows} />;
-    case "text": return <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-5 text-fg">{det.text}</pre>;
+    case "text": return <SmartText text={det.text ?? ""} maxHeight={100_000} />;
     case "binary":
       return (
         <>
@@ -296,6 +305,7 @@ function Props({ item, onCopy }: { item: Item; onCopy: Notify }) {
 }
 
 function PropTable({ title, tip, rows, empty, explain, onCopy }: { title: string; tip: string; rows: [string, unknown][]; empty?: string; explain?: boolean; onCopy: Notify }) {
+  const [propW, setPropW, resetPropW] = useStoredSize("sb.props.key", 220);
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
@@ -309,11 +319,12 @@ function PropTable({ title, tip, rows, empty, explain, onCopy }: { title: string
         {rows.map(([k, v]) => {
           const s = typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
           return (
-            <div key={k} className="group grid grid-cols-[220px_1fr_auto] items-center border-b border-line/60 pr-1.5 last:border-0 hover:bg-white/[0.02]">
-              <Tip content={explain && G.props[k] ? { title: k, body: G.props[k] } : null} className="px-3">
-                <span className={cn("selectable truncate py-2 font-mono text-[12px] text-fg-3", explain && G.props[k] && "cursor-help")}>{k}</span>
+            <div key={k} className="group grid items-center border-b border-line/60 pr-1.5 last:border-0 hover:bg-white/[0.02]" style={{ gridTemplateColumns: `${propW}px 1fr auto` }}>
+              <Tip content={explain && G.props[k] ? { title: k, body: G.props[k] } : null} className="relative px-3">
+                <span title={k} className={cn("selectable truncate py-2 font-mono text-[12px] text-fg-3", explain && G.props[k] && "cursor-help")}>{k}</span>
+                <ResizeHandle size={propW} onSize={setPropW} onReset={resetPropW} min={100} max={520} label="Resize name column" />
               </Tip>
-              <span className="selectable break-all py-2 font-mono text-[12px] text-fg">{s}</span>
+              <Value text={s} />
               <Tip content={`Copy ${k}`}><Button variant="ghost" size="icon-sm" aria-label={`Copy ${k}`} onClick={() => onCopy(k, s)} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"><ClipboardCopy /></Button></Tip>
             </div>
           );

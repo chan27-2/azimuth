@@ -10,6 +10,7 @@ import * as G from "../../lib/glossary";
 import { Button, Chip, CopyButton, Field, Select, Spinner, Tip } from "../../ui/ui";
 import { JsonTree } from "../../ui/viewers/JsonTree";
 import { triggerSummary } from "./common";
+import { SmartText } from "../../ui/SmartText";
 
 // Inputs are remembered for this session only. Request bodies can hold real data, so nothing is written to disk.
 const drafts = new Map<string, { http: HttpRun; input: string }>();
@@ -179,7 +180,7 @@ function Response({ result }: { result: RunResult }) {
         </details>
       )}
       {text ? (
-        json !== undefined ? <div className="max-h-80 overflow-auto p-1.5"><JsonTree value={json} onCopy={(_, t) => copy(t)} /></div> : <pre className="selectable max-h-80 overflow-auto whitespace-pre-wrap break-all p-3 font-mono text-[12px] text-fg-2">{text}</pre>
+        json !== undefined ? <div className="max-h-80 overflow-auto p-1.5"><JsonTree value={json} onCopy={(_, t) => copy(t)} /></div> : <SmartText text={text} className="p-3" maxHeight={320} />
       ) : (
         <div className="px-3 py-2.5 text-[12px] text-fg-3">Empty body</div>
       )}

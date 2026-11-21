@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowUpRight, ChevronRight, Lock, Play, RefreshCw, SearchX, Zap } from "lucide-react";
+import { ArrowUpRight, Lock, Play, RefreshCw, SearchX, Zap } from "lucide-react";
 import type { Component, Fn, FnAccess, FnStats, FunctionApp, Invocation, InsightsLink, Range } from "../../types";
 import { api } from "../../lib/api";
 import { invalidate, useQuery } from "../../lib/query";
 import { ago, cn, compact, envOf, fmtMs, fmtTime, pct } from "../../lib/util";
 import * as G from "../../lib/glossary";
-import { Button, Chip, CopyButton, Empty, EnvBadge, Header, NoDrag, Select, Spinner, Switch, Tip } from "../../ui/ui";
+import { Breadcrumbs, Button, Chip, CopyButton, Empty, EnvBadge, Header, NoDrag, Select, Spinner, Switch, Tip } from "../../ui/ui";
 import { FunctionsGlyph, InsightsGlyph } from "../../ui/Logo";
 import { useNav, type Place } from "../../shell/nav";
 import { RangeSelect, useRange, useTrace } from "../insights/common";
@@ -15,6 +15,16 @@ import { TraceView } from "../insights/TraceView";
 import { LogsTab } from "../insights/LogsTab";
 import { triggerIcon, triggerSummary, useFnLink } from "./common";
 import { RunPanel } from "./RunPanel";
+import { ResizablePane, Th, useColumns, type Col } from "../../ui/resize";
+
+const FN_COLS: Col[] = [
+  { key: "name", label: "Function", width: 300 },
+  { key: "trigger", label: "Trigger", width: 300 },
+  { key: "runs", label: "Runs", width: 84, align: "right" },
+  { key: "failed", label: "Failed", width: 84, align: "right" },
+  { key: "p95", label: "p95", width: 84, align: "right" },
+  { key: "last", label: "Last run", width: 110, align: "right" },
+];
 
 export function FunctionsView({ place }: { place: Extract<Place, { tool: "fn" }> }) {
   if (!place.app) {
@@ -53,20 +63,13 @@ function Frame({ app, fn, link, range, setRange, actions, children }: Common & {
   return (
     <div className="relative flex h-full flex-col">
       <Header>
-        <nav aria-label="Breadcrumb" className="no-drag flex min-w-0 items-center gap-1.5 text-[13px]">
-          <span className="shrink-0 text-fg-3">Functions</span>
-          <ChevronRight className="size-3.5 shrink-0 text-fg-3" />
-          {fn ? (
-            <Tip content={{ title: `Back to ${app.name}`, body: "All functions in the app, their numbers and live logs." }} side="bottom" className="min-w-[48px] shrink-[4]">
-              <button onClick={() => go({ tool: "fn", app })} className="truncate text-fg-2 hover:text-fg">{app.name}</button>
-            </Tip>
-          ) : (
-            <span className="truncate font-medium text-fg" title={app.name}>{app.name}</span>
-          )}
-          {fn && <><ChevronRight className="size-3.5 shrink-0 text-fg-3" /><span className="truncate font-medium text-fg" title={fn}>{fn}</span></>}
-          <Tip content={G.env[env]}><EnvBadge env={env} /></Tip>
-          {app.state !== "Running" && <Chip tone="warn">{app.state}</Chip>}
-        </nav>
+        <Breadcrumbs items={[
+          { label: "Functions", onClick: () => go({ tool: "fn", app: undefined }), tip: { title: "Functions", body: "All function apps." } },
+          ...(fn ? [{ label: app.name, icon: <FunctionsGlyph className="size-3.5" />, onClick: () => go({ tool: "fn", app }), tip: { title: `Back to ${app.name}`, body: "All functions in the app, their numbers and live logs." } }] : []),
+          fn ? { label: fn, icon: <Zap /> } : { label: app.name, icon: <FunctionsGlyph className="size-3.5" /> },
+        ]} />
+        <Tip content={G.env[env]}><EnvBadge env={env} /></Tip>
+        {app.state !== "Running" && <Chip tone="warn">{app.state}</Chip>}
         <NoDrag className="ml-auto">
           <RangeSelect value={range} onChange={setRange} />
           <Tip content="Load again" side="bottom">
@@ -114,6 +117,7 @@ function AppPage(p: Common & { fnsError?: string; fnsLoading: boolean; onChooseL
   const names = useMemo(() => fns?.map((f) => f.name) ?? [], [fns]);
   const stats = useQuery<FnStats[]>(link && names.length ? `fnstats:${app.id}|${link.component.id}|${link.role ?? ""}|${range}` : null, () => api.fn.stats({ link: link!, functionNames: names, range }));
   const byName = new Map((stats.data ?? []).map((s) => [s.name.toLowerCase(), s]));
+  const columns = useColumns("fn.functions", FN_COLS);
   return (
     <Frame {...p}>
       <div className="flex h-full flex-col">
@@ -123,21 +127,22 @@ function AppPage(p: Common & { fnsError?: string; fnsLoading: boolean; onChooseL
           <LinkInfo app={app} link={link} loading={p.linkLoading} onChoose={p.onChooseLink} error={p.linkError} />
           {p.access && !p.access.run && <Tip content={{ title: "Read-only here", body: G.fn.noRunAccess }}><span className="flex items-center gap-1 text-fg-3"><Lock className="size-3" />Read-only</span></Tip>}
         </div>
-        <div className="max-h-[48%] shrink-0 overflow-y-auto border-b border-line">
+        <div className="max-h-[48%] shrink-0 overflow-auto border-b border-line">
           {p.fnsLoading && !fns ? (
             <div className="flex items-center gap-2 px-5 py-6 text-[13px] text-fg-3"><Spinner /> Loading functions</div>
           ) : p.fnsError ? (
             <div className="px-5 py-6 text-[13px] text-bad">{p.fnsError}</div>
           ) : (
-            <table className="w-full table-fixed text-[12.5px]">
-              <thead className="sticky top-0 bg-bg text-[11px] text-fg-3">
+            <table className="w-full table-fixed text-[12.5px]" style={{ minWidth: columns.total }}>
+              <thead className="sticky top-0 z-10 bg-bg text-[11px] text-fg-3">
                 <tr className="border-b border-line">
-                  <th className="px-5 py-1.5 text-left font-normal">Function</th>
-                  <th className="px-2 py-1.5 text-left font-normal">Trigger</th>
-                  <th className="w-[84px] px-2 py-1.5 text-right font-normal">Runs</th>
-                  <th className="w-[84px] px-2 py-1.5 text-right font-normal">Failed</th>
-                  <th className="w-[84px] px-2 py-1.5 text-right font-normal"><Tip content={G.ai.p95}><span>p95</span></Tip></th>
-                  <th className="w-[110px] px-5 py-1.5 text-right font-normal">Last run</th>
+                  <Th col={FN_COLS[0]} columns={columns} className="py-1.5 pl-5 pr-2" />
+                  <Th col={FN_COLS[1]} columns={columns} className="px-2 py-1.5" />
+                  <Th col={FN_COLS[2]} columns={columns} className="px-2 py-1.5" />
+                  <Th col={FN_COLS[3]} columns={columns} className="px-2 py-1.5" />
+                  <Th col={FN_COLS[4]} columns={columns} className="px-2 py-1.5"><Tip content={G.ai.p95}><span>p95</span></Tip></Th>
+                  <Th col={FN_COLS[5]} columns={columns} className="px-2 py-1.5" />
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -145,14 +150,15 @@ function AppPage(p: Common & { fnsError?: string; fnsLoading: boolean; onChooseL
                   const s = byName.get(f.name.toLowerCase());
                   return (
                     <tr key={f.name} onClick={() => go({ tool: "fn", app, fn: f.name })} className={cn("cursor-default border-b border-line/60 last:border-0 hover:bg-bg-2", f.disabled && "opacity-60")}>
-                      <td className="px-5 py-2">
+                      <td className="py-2 pl-5 pr-2">
                         <span className="flex min-w-0 items-center gap-2 text-fg"><span className="flex shrink-0 text-fg-3 [&_svg]:size-3.5">{triggerIcon(f.trigger.type)}</span><span className="truncate">{f.name}</span>{f.disabled && <span className="text-[10px] uppercase tracking-wider text-fg-3">disabled</span>}</span>
                       </td>
                       <td className="truncate px-2 py-2 text-fg-3"><Tip content={G.fn.trigger(f.trigger.type)}><span className="truncate">{triggerSummary(f)}</span></Tip></td>
                       <td className="px-2 py-2 text-right tabular text-fg-2">{stats.loading ? "·" : s ? compact(s.n) : "—"}</td>
                       <td className={cn("px-2 py-2 text-right tabular", s?.failed ? "text-bad" : "text-fg-3")}>{s?.failed ? pct(s.failed, s.n) : "—"}</td>
                       <td className="px-2 py-2 text-right tabular text-fg-2">{s ? fmtMs(s.p95) : "—"}</td>
-                      <td className="px-5 py-2 text-right tabular text-fg-3">{s ? ago(s.lastRun) : "—"}</td>
+                      <td className="px-2 py-2 text-right tabular text-fg-3">{s ? ago(s.lastRun) : "—"}</td>
+                      <td />
                     </tr>
                   );
                 })}
@@ -228,7 +234,7 @@ function FunctionPage(p: Common & { f: Fn }) {
           : <Empty icon={<InsightsGlyph className="size-4" />} title="No invocation history">Choose this app's Application Insights resource on the app page and Azimuth will remember it.</Empty>
         ) : (
           <div className="flex min-h-0 flex-1">
-            <div className="flex w-[300px] shrink-0 flex-col border-r border-line">
+            <ResizablePane id="fn.invocations" initial={320} min={220} max={640} className="flex flex-col border-r border-line">
               <div className="flex h-10 shrink-0 items-center justify-between border-b border-line px-4 text-[12px] text-fg-3">
                 <Tip content={G.fn.invocation}><span>{inv.loading ? "Loading…" : `${list.length}${list.length >= 300 ? "+" : ""} invocations`}</span></Tip>
                 <Switch checked={failedOnly} onChange={(x) => { setFailedOnly(x); setSelected(null); }} label="Failed only" />
@@ -259,7 +265,7 @@ function FunctionPage(p: Common & { f: Fn }) {
                   </div>
                 </div>
               )}
-            </div>
+            </ResizablePane>
             <div className="min-w-0 flex-1">
               {selected ? (
                 <TraceView items={trace.trace?.items} operationId={selected.operation_Id} loading={trace.loading} error={trace.error} onSearchWider={trace.widen} wider={trace.wide}

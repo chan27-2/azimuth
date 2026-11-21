@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, ArrowUpRight, MessageSquare } from "lucide-react";
 import type { Component, LogRow, Range } from "../../types";
@@ -10,6 +9,8 @@ import * as G from "../../lib/glossary";
 import { Button, Empty, Field, Select, Spinner, Switch, Tip } from "../../ui/ui";
 import { JsonTree } from "../../ui/viewers/JsonTree";
 import { LogEntry, SeverityBadge } from "./TraceView";
+import { ColumnHeader, PanelToggle, SidePanel, useColumns, usePanel, type Col } from "../../ui/resize";
+import { deepParse, oneLine } from "../../ui/SmartText";
 
 const LEVELS = [{ value: 0, label: "All levels" }, { value: 1, label: "Info and up" }, { value: 2, label: "Warnings and up" }, { value: 3, label: "Errors only" }];
 const LIVE_EVERY = 10_000;
@@ -62,6 +63,14 @@ export function LogsTab({ component, range, role, initialSearch, onOpen, operati
   const sel = rows.find((r) => r.itemId === selected) ?? null;
   const scroller = useRef<HTMLDivElement>(null);
   const v = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => 34, overscan: 16 });
+  const [panelOpen, togglePanel, setPanelOpen] = usePanel("logs.detail");
+  const cols: Col[] = [
+    { key: "time", label: "Time", width: 96 },
+    { key: "level", label: "Level", width: 86 },
+    ...(compact ? [] : [{ key: "service", label: "Service", width: 170 }]),
+    { key: "message", label: "Message", width: 0, flex: true, min: 200 },
+  ];
+  const columns = useColumns(compact ? "logs.compact" : "logs", cols);
 
   return (
     <div className="flex h-full flex-col">
@@ -77,6 +86,7 @@ export function LogsTab({ component, range, role, initialSearch, onOpen, operati
           </span>
         </Tip>
         <span className="ml-auto text-[12px] text-fg-3">{q.loading ? <Spinner className="size-3" /> : `${rows.length}${rows.length >= 500 ? "+" : ""} entries, newest first`}</span>
+        <PanelToggle open={panelOpen} onToggle={togglePanel} label="log details" />
       </div>
       {q.error ? (
         <Empty icon={<AlertTriangle />} title="Couldn't load logs">{q.error}</Empty>
@@ -84,30 +94,34 @@ export function LogsTab({ component, range, role, initialSearch, onOpen, operati
         <Empty icon={<MessageSquare />} title="No logs match">Try a longer time range, a lower severity or a different search.{live ? " New entries will appear here as they arrive." : ""}</Empty>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <div ref={scroller} className="min-w-0 flex-1 overflow-y-auto">
+          <div className="flex min-w-0 flex-1 flex-col">
+          <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
+            <div style={{ minWidth: columns.total + 40 }}>
+            <ColumnHeader cols={cols} columns={columns} className="px-5" />
             <div style={{ height: v.getTotalSize(), position: "relative" }}>
               {v.getVirtualItems().map((it) => {
                 const r = rows[it.index];
                 return (
                   <button
                     key={r.itemId}
-                    onClick={() => setSelected(r.itemId === selected ? null : r.itemId)}
-                    style={{ position: "absolute", top: 0, left: 0, right: 0, height: it.size, transform: `translateY(${it.start}px)` }}
-                    className={cn("flex items-center gap-3 border-b border-line/50 px-5 text-left text-[12.5px]", selected === r.itemId ? "bg-bg-3" : "hover:bg-bg-2")}
+                    onClick={() => { setSelected(r.itemId); setPanelOpen(true); }}
+                    style={{ position: "absolute", top: 0, left: 0, right: 0, height: it.size, transform: `translateY(${it.start}px)`, gridTemplateColumns: columns.template }}
+                    className={cn("grid items-center border-b border-line/50 px-5 text-left text-[12.5px] [&>*]:pr-3", selected === r.itemId ? "bg-bg-3" : "hover:bg-bg-2")}
                   >
-                    <span className="w-[86px] shrink-0 tabular text-fg-3">{new Date(r.timestamp).toLocaleTimeString(undefined, { hour12: false })}</span>
-                    <SeverityBadge item={r} />
-                    {!compact && <span className="w-[150px] shrink-0 truncate text-fg-3" title={r.cloud_RoleName}>{r.cloud_RoleName}</span>}
-                    <span className={cn("min-w-0 flex-1 truncate font-mono text-[12px]", r.itemType === "exception" ? "text-bad" : "text-fg-2")}>{r.message}</span>
+                    <span className="truncate tabular text-fg-3">{new Date(r.timestamp).toLocaleTimeString(undefined, { hour12: false })}</span>
+                    <span className="flex"><SeverityBadge item={r} /></span>
+                    {!compact && <span className="truncate text-fg-3" title={r.cloud_RoleName}>{r.cloud_RoleName}</span>}
+                    <span className={cn("min-w-0 truncate font-mono text-[12px]", r.itemType === "exception" ? "text-bad" : "text-fg-2")}>{oneLine(r.message)}</span>
                   </button>
                 );
               })}
             </div>
+            </div>
           </div>
-          <AnimatePresence initial={false}>
+          </div>
+          <SidePanel id="logs.detail" open={!!sel && panelOpen} initial={440}>
             {sel && (
-              <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 420, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ type: "spring", bounce: 0, duration: 0.25 }} className="shrink-0 overflow-hidden border-l border-line">
-                <div className="h-full w-[420px] space-y-3 overflow-y-auto p-4">
+                <div className="h-full space-y-3 overflow-y-auto p-4">
                   <LogEntry item={{ ...sel, outerMessage: null, type: null }} />
                   <div className="grid grid-cols-[96px_1fr] gap-y-1.5 text-[12px]">
                     <span className="text-fg-3">Service</span><span className="selectable truncate text-fg-2">{sel.cloud_RoleName || "—"}</span>
@@ -118,13 +132,12 @@ export function LogsTab({ component, range, role, initialSearch, onOpen, operati
                   {sel.customDimensions && Object.keys(sel.customDimensions).length > 0 && (
                     <div>
                       <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-fg-3">Custom properties</div>
-                      <div className="rounded-md border border-line bg-bg-1 p-1.5"><JsonTree value={sel.customDimensions} onCopy={(_, t) => copy(t)} /></div>
+                      <div className="rounded-md border border-line bg-bg-1 p-1.5"><JsonTree value={deepParse(sel.customDimensions)} onCopy={(_, t) => copy(t)} /></div>
                     </div>
                   )}
                 </div>
-              </motion.aside>
             )}
-          </AnimatePresence>
+          </SidePanel>
         </div>
       )}
     </div>

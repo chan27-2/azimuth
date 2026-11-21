@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronRight, Radar, RefreshCw, SearchX } from "lucide-react";
+import { Radar, RefreshCw, SearchX } from "lucide-react";
 import type { Component, FoundTrace, Overview, Trace } from "../../types";
 import { api } from "../../lib/api";
 import { invalidate, useQuery } from "../../lib/query";
 import { envOf, fmtTime } from "../../lib/util";
 import * as G from "../../lib/glossary";
-import { Button, Empty, EnvBadge, Header, NoDrag, Select, Spinner, Tabs, Tip } from "../../ui/ui";
+import { Breadcrumbs, Button, Empty, EnvBadge, Header, NoDrag, Select, Spinner, Tabs, Tip } from "../../ui/ui";
 import { InsightsGlyph } from "../../ui/Logo";
 import { useNav, type Place, type TraceTarget } from "../../shell/nav";
 import { RangeSelect, useRange, useTrace } from "./common";
@@ -32,6 +32,7 @@ export function InsightsView({ place }: { place: Extract<Place, { tool: "ai" }> 
 type Tab = "overview" | "requests" | "logs" | "query";
 
 function ComponentView({ component, initialTrace }: { component: Component; initialTrace?: TraceTarget }) {
+  const { go } = useNav();
   const [tab, setTab] = useState<Tab>("overview");
   const [range, setRange] = useRange();
   const [role, setRole] = useState<string | null>(null);
@@ -46,12 +47,14 @@ function ComponentView({ component, initialTrace }: { component: Component; init
   return (
     <div className="relative flex h-full flex-col">
       <Header>
-        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px]">
-          <span className="shrink-0 text-fg-3">Insights</span>
-          <ChevronRight className="size-3.5 shrink-0 text-fg-3" />
-          <span className="truncate font-medium text-fg" title={component.name}>{component.name}</span>
-          <Tip content={G.env[env]}><EnvBadge env={env} /></Tip>
-        </nav>
+        <Breadcrumbs items={[
+          { label: "Insights", onClick: () => go({ tool: "ai", component: undefined }), tip: { title: "Application Insights", body: "All resources, and Find trace." } },
+          trace
+            ? { label: component.name, icon: <InsightsGlyph className="size-3.5" />, onClick: () => setTrace(null), tip: { title: `Back to ${component.name}`, body: "Closes the trace. Esc does the same." } }
+            : { label: component.name, icon: <InsightsGlyph className="size-3.5" /> },
+          ...(trace ? [{ label: `Trace ${trace.operationId.slice(0, 8)}…`, icon: <Radar /> }] : []),
+        ]} />
+        <Tip content={G.env[env]}><EnvBadge env={env} /></Tip>
         <NoDrag className="ml-auto">
           {(roles.data?.roles.length ?? 0) > 1 && (
             <Tip content={G.ai.roleFilter} side="bottom">
@@ -111,11 +114,10 @@ function TraceFinder({ target }: { target: TraceTarget }) {
   return (
     <div className="flex h-full flex-col">
       <Header>
-        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px]">
-          <span className="shrink-0 text-fg-3">Insights</span>
-          <ChevronRight className="size-3.5 shrink-0 text-fg-3" />
-          <span className="flex items-center gap-1.5 font-medium text-fg"><Radar className="size-3.5 text-fg-3" />Find trace</span>
-        </nav>
+        <Breadcrumbs items={[
+          { label: "Insights", onClick: () => go({ tool: "ai", component: undefined }), tip: { title: "Application Insights", body: "All resources." } },
+          { label: "Find trace", icon: <Radar /> },
+        ]} />
         {found.data && (
           <NoDrag className="ml-auto text-[12px] text-fg-3">
             Found in {found.data.hits.map((h, i) => (

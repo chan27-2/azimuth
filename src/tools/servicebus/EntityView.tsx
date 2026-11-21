@@ -2,13 +2,15 @@ import { useMemo, useRef, useState } from "react";
 import { api } from "../../lib/api";
 import { AnimatePresence, motion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Box, ChevronRight, GitCompare, Inbox, KeyRound, Layers, Lock, Network, RefreshCw, ShieldCheck, Skull, X } from "lucide-react";
+import { Box, GitCompare, Inbox, KeyRound, Layers, Lock, Network, RefreshCw, ShieldCheck, Skull, X } from "lucide-react";
 import { canRead, type Access, type Auth, type Entities, type EntityRef, type Message, type Sub } from "../../types";
 import { fetchQuery, useQuery, peekCache } from "../../lib/query";
 import { AccessPanel } from "./AccessPanel";
 import { b64ToBytes, detect, type Detection } from "./detect";
 import { ago, cn, envOf, fmtTime } from "../../lib/util";
-import { AnimatedNumber, Button, Chip, Empty, EnvBadge, Field, Header, NoDrag, Select, Spinner, Tabs, Tip } from "../../ui/ui";
+import { AnimatedNumber, Breadcrumbs, Button, Chip, Empty, EnvBadge, Field, Header, NoDrag, Select, Spinner, Tabs, Tip } from "../../ui/ui";
+import { useNav } from "../../shell/nav";
+import { ResizablePane } from "../../ui/resize";
 import * as G from "../../lib/glossary";
 import { mod, modClick } from "../../lib/platform";
 import { MessageDetail } from "./MessageDetail";
@@ -20,6 +22,7 @@ const refKey = (r: EntityRef) => (r.kind === "queue" ? `${r.ns.id}|q|${r.queue}`
 
 export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () => void }) {
   const ents = peekCache<Entities>(`ent:${entity.ns.id}`);
+  const { go } = useNav();
   const counts = useMemo(() => {
     if (!ents) return null;
     if (entity.kind === "queue") return ents.queues.find((q) => q.name === entity.queue)?.counts ?? null;
@@ -88,30 +91,12 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
   return (
     <div className="flex h-full flex-col">
       <Header>
-        <nav aria-label="Breadcrumb" className="no-drag -ml-1.5 flex min-w-0 items-center gap-1 text-[13px]">
-          <Tip content={{ title: `Back to ${entity.ns.name}`, body: `Topology and totals for the whole namespace. Shortcut: ${mod("[")}` }} side="bottom" className="min-w-[56px] shrink-[4]">
-            <button onClick={onBack} className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-fg-3 transition-colors duration-150 hover:bg-bg-2 hover:text-fg">
-              <Network className="size-3.5 shrink-0" />
-              <span className="truncate">{entity.ns.name}</span>
-            </button>
-          </Tip>
-          <ChevronRight className="size-3.5 shrink-0 text-line-2" />
-          {entity.kind === "subscription" && (
-            <>
-              <Tip content={{ title: `Topic · ${entity.topic}`, body: "Opens the namespace, where this topic and all its subscriptions are drawn." }} side="bottom" className="min-w-[56px] shrink-[2]">
-                <button onClick={onBack} className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-fg-3 transition-colors duration-150 hover:bg-bg-2 hover:text-fg">
-                  <Layers className="size-3.5 shrink-0" />
-                  <span className="truncate">{entity.topic}</span>
-                </button>
-              </Tip>
-              <ChevronRight className="size-3.5 shrink-0 text-line-2" />
-            </>
-          )}
-          <h1 title={title} className="flex min-w-[80px] shrink items-center gap-1.5 px-1.5 text-[14px] font-semibold tracking-tight">
-            <Icon className="size-3.5 shrink-0 text-fg-3" />
-            <span className="truncate">{title}</span>
-          </h1>
-        </nav>
+        <Breadcrumbs items={[
+          { label: "Service Bus", onClick: () => go({ tool: "sb", ns: undefined }), tip: { title: "Service Bus", body: "All namespaces." } },
+          { label: entity.ns.name, icon: <Network />, onClick: onBack, tip: { title: `Back to ${entity.ns.name}`, body: `Topology and totals for the whole namespace. Shortcut: ${mod("[")}` } },
+          ...(entity.kind === "subscription" ? [{ label: entity.topic, icon: <Layers />, onClick: onBack, tip: { title: `Topic · ${entity.topic}`, body: "Opens the namespace, where this topic and all its subscriptions are drawn." } }] : []),
+          { label: title, icon: <Icon /> },
+        ]} />
         <Tip content={G.env[envOf(entity.ns.name)]} side="bottom"><EnvBadge env={envOf(entity.ns.name)} /></Tip>
         <NoDrag className="ml-auto shrink-0 pl-2">
           {q.data && (
@@ -158,7 +143,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
         />
       ) : (
       <div className="flex min-h-0 flex-1">
-        <section className="flex w-[400px] shrink-0 flex-col border-r border-line">
+        <ResizablePane id="sb.messages" initial={400} min={300} max={760} className="flex flex-col border-r border-line">
           <div className="space-y-3 border-b border-line p-3">
             <Field value={filter} onChange={setFilter} placeholder="Filter by body, id, property…" />
             {items.length > 1 && <Histogram items={items} range={range} onRange={setRange} />}
@@ -197,7 +182,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
               onSelect={(s, meta) => (meta ? setCompare(compare === s ? null : s) : setSelected(s))}
             />
           )}
-        </section>
+        </ResizablePane>
         <section className="min-w-0 flex-1">
           <AnimatePresence mode="wait">
             {sel ? (

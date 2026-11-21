@@ -1,13 +1,15 @@
 // One operation as a waterfall: requests and dependencies as spans nested by parent id, logs and
 // exceptions pinned to the span that emitted them. Used by Insights and by Functions invocations.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { AlertTriangle, ArrowDownToLine, Braces, ChevronRight, Database, Globe, Link2, MessageSquare, Radio, Server, X, Zap } from "lucide-react";
 import type { TraceItem } from "../../types";
 import { cn, copy, fmtMs, fmtTime, SEVERITY } from "../../lib/util";
 import * as G from "../../lib/glossary";
 import { Button, Chip, CopyButton, Empty, Spinner, Tabs, Tip } from "../../ui/ui";
 import { JsonTree } from "../../ui/viewers/JsonTree";
+import { PanelToggle, ResizeHandle, SidePanel, usePanel, useStoredSize } from "../../ui/resize";
+import { SmartText, deepParse } from "../../ui/SmartText";
 
 type Span = TraceItem & { start: number; end: number; children: Span[]; logs: TraceItem[]; depth: number; failed: boolean };
 
@@ -73,6 +75,9 @@ export function TraceView({ items, operationId, loading, error, onClose, actions
   const [selected, setSelected] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<"waterfall" | "logs">("waterfall");
+  const [panelOpen, togglePanel, setPanelOpen] = usePanel("trace.detail");
+  const [spanCol, setSpanCol, resetSpanCol] = useStoredSize("trace.spancol", 320);
+  const select = (id: string | null) => { setSelected(id); if (id) setPanelOpen(true); };
 
   // Select the first failing span, else the root.
   useEffect(() => {
@@ -124,6 +129,7 @@ export function TraceView({ items, operationId, loading, error, onClose, actions
       )}
       <div className="ml-auto flex items-center gap-1.5">
         {actions}
+        {model && tab === "waterfall" && <PanelToggle open={panelOpen} onToggle={togglePanel} label="span details" />}
         {items && <Tip content="Copy every item in this operation as JSON"><Button variant="ghost" size="icon" aria-label="Copy trace as JSON" onClick={() => copy(JSON.stringify(items, null, 2))}><Braces /></Button></Tip>}
         {onClose && <Tip content="Close (Esc)"><Button variant="ghost" size="icon" aria-label="Close trace" onClick={onClose}><X /></Button></Tip>}
       </div>
@@ -154,9 +160,9 @@ export function TraceView({ items, operationId, loading, error, onClose, actions
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-auto">
           {tab === "waterfall" ? (
-            <div className="min-w-[480px]">
-              <div className="sticky top-0 z-10 grid grid-cols-[minmax(200px,36%)_1fr] border-b border-line bg-bg/95 text-[11px] text-fg-3 backdrop-blur">
-                <div className="px-4 py-1.5">Span</div>
+            <div style={{ minWidth: spanCol + 320 }}>
+              <div className="sticky top-0 z-10 grid border-b border-line bg-bg/95 text-[11px] text-fg-3 backdrop-blur" style={{ gridTemplateColumns: `${spanCol}px 1fr` }}>
+                <div className="relative px-4 py-1.5">Span<ResizeHandle size={spanCol} onSize={setSpanCol} onReset={resetSpanCol} min={160} max={900} label="Resize span column" /></div>
                 <div className="relative overflow-hidden py-1.5 pr-4"><span className="invisible">0</span>
                   {[0, 0.25, 0.5, 1].map((f) => (
                     <span key={f} className="absolute top-1.5 tabular" style={f === 1 ? { right: 16 } : { left: `calc((100% - 16px) * ${f})`, translate: f === 0 ? "0" : "-50%" }}>{fmtMs(total * f)}</span>
@@ -171,9 +177,10 @@ export function TraceView({ items, operationId, loading, error, onClose, actions
                     key={s.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelected(s.id)}
-                    onKeyDown={(e) => e.key === "Enter" && setSelected(s.id)}
-                    className={cn("group grid h-8 cursor-default grid-cols-[minmax(200px,36%)_1fr] items-center border-b border-line/50 text-[12.5px]", selected === s.id ? "bg-bg-3" : "hover:bg-bg-2")}
+                    onClick={() => select(s.id)}
+                    onKeyDown={(e) => e.key === "Enter" && select(s.id)}
+                    style={{ gridTemplateColumns: `${spanCol}px 1fr` }}
+                    className={cn("group grid h-8 cursor-default items-center border-b border-line/50 text-[12.5px]", selected === s.id ? "bg-bg-3" : "hover:bg-bg-2")}
                   >
                     <div className="flex min-w-0 items-center gap-1.5 pr-3" style={{ paddingLeft: 12 + s.depth * 16 }}>
                       {s.children.length ? (
@@ -215,16 +222,12 @@ export function TraceView({ items, operationId, loading, error, onClose, actions
               )}
             </div>
           ) : (
-            <LogList items={logs} colorOf={colorOf} onSelectSpan={(id) => { setSelected(id); setTab("waterfall"); }} spanIds={new Set(model.spans.map((s) => s.id!))} />
+            <LogList items={logs} colorOf={colorOf} onSelectSpan={(id) => { select(id); setTab("waterfall"); }} spanIds={new Set(model.spans.map((s) => s.id!))} />
           )}
         </div>
-        <AnimatePresence initial={false}>
-          {sel && tab === "waterfall" && (
-            <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 360, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ type: "spring", bounce: 0, duration: 0.25 }} className="shrink-0 overflow-hidden border-l border-line">
-              <SpanDetail span={sel} />
-            </motion.aside>
-          )}
-        </AnimatePresence>
+        <SidePanel id="trace.detail" open={!!sel && tab === "waterfall" && panelOpen} initial={380}>
+          {sel && <SpanDetail span={sel} />}
+        </SidePanel>
       </div>
     </div>
   );
@@ -243,7 +246,7 @@ function SpanDetail({ span }: { span: Span }) {
     ...(span.url ? [["URL", span.url, span.url] as [string, ReactNode, string]] : []),
   ];
   return (
-    <div className="flex h-full w-[360px] flex-col overflow-y-auto">
+    <div className="flex h-full flex-col overflow-y-auto">
       <div className="border-b border-line px-4 py-3">
         <div className={cn("break-words text-[13px] font-medium", span.failed ? "text-bad" : "text-fg")}>{span.name || span.type}</div>
         <div className="mt-0.5 font-mono text-[11px] text-fg-3">span {span.id}</div>
@@ -258,7 +261,7 @@ function SpanDetail({ span }: { span: Span }) {
       </dl>
       {span.data && (
         <Section title={span.type?.toLowerCase().includes("sql") ? "Command" : "Data"} copyText={span.data}>
-          <pre className="selectable max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border border-line bg-bg-1 p-2.5 font-mono text-[11.5px] text-fg-2">{span.data}</pre>
+          <SmartText text={span.data} maxHeight={320} />
         </Section>
       )}
       {span.logs.length > 0 && (
@@ -270,7 +273,7 @@ function SpanDetail({ span }: { span: Span }) {
       )}
       {span.customDimensions && Object.keys(span.customDimensions).length > 0 && (
         <Section title="Custom properties" copyText={JSON.stringify(span.customDimensions, null, 2)}>
-          <div className="rounded-md border border-line bg-bg-1 p-1.5"><JsonTree value={span.customDimensions} onCopy={(_, t) => copy(t)} /></div>
+          <div className="rounded-md border border-line bg-bg-1 p-1.5"><JsonTree value={deepParse(span.customDimensions)} onCopy={(_, t) => copy(t)} /></div>
         </Section>
       )}
     </div>
@@ -315,11 +318,11 @@ export function LogEntry({ item }: { item: Pick<TraceItem, "itemType" | "severit
         <span className="text-[11px] tabular text-fg-3">{new Date(item.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, fractionalSecondDigits: 3 } as Intl.DateTimeFormatOptions)}</span>
         <CopyButton text={stack ? `${text}\n${stack}` : text} className="ml-auto" label="Copy log" />
       </div>
-      <div className="selectable mt-1.5 whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-fg-2">{text}</div>
+      <SmartText text={text} className="mt-1.5" maxHeight={360} />
       {stack && (
         <>
           <button onClick={() => setOpen(!open)} className="mt-1.5 text-[11px] text-fg-3 hover:text-fg-2">{open ? "Hide" : "Show"} stack trace</button>
-          {open && <pre className="selectable mt-1.5 max-h-72 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed text-fg-3">{stack}</pre>}
+          {open && <SmartText text={stack} className="mt-1.5" maxHeight={360} />}
         </>
       )}
     </div>

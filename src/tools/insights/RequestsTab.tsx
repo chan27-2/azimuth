@@ -7,6 +7,15 @@ import { useQuery } from "../../lib/query";
 import { cn, fmtMs, fmtTime } from "../../lib/util";
 import { Button, Chip, Empty, Field, Select, Spinner, Switch, Tip } from "../../ui/ui";
 import * as G from "../../lib/glossary";
+import { ColumnHeader, useColumns, type Col } from "../../ui/resize";
+
+const COLS: Col[] = [
+  { key: "time", label: "Time", width: 160 },
+  { key: "result", label: "Result", width: 72 },
+  { key: "name", label: "Name", width: 0, flex: true, min: 160 },
+  { key: "service", label: "Service", width: 190 },
+  { key: "duration", label: "Duration", width: 130, align: "right" },
+];
 
 const DURATIONS = [
   { value: 0, label: "Any duration" }, { value: 100, label: "≥ 100ms" }, { value: 500, label: "≥ 500ms" },
@@ -26,6 +35,7 @@ export function RequestsTab({ component, range, role, name, onClearName, onOpen 
   const max = Math.max(1, ...rows.map((r) => r.duration));
   const scroller = useRef<HTMLDivElement>(null);
   const v = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => 36, overscan: 12 });
+  const columns = useColumns("ai.requests", COLS);
 
   return (
     <div className="flex h-full flex-col">
@@ -44,10 +54,9 @@ export function RequestsTab({ component, range, role, name, onClearName, onOpen 
         <Empty icon={<Inbox />} title="No requests match">Try a longer time range or fewer filters.</Empty>
       ) : (
         <>
-          <div className="grid shrink-0 grid-cols-[150px_64px_minmax(0,1fr)_180px_120px] gap-3 border-b border-line px-5 py-1.5 text-[11px] text-fg-3">
-            <span>Time</span><span>Result</span><span>Name</span><span>Service</span><span className="text-right">Duration</span>
-          </div>
-          <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
+            <div style={{ minWidth: columns.total + 40 }}>
+            <ColumnHeader cols={COLS} columns={columns} className="px-5" />
             <div style={{ height: v.getTotalSize(), position: "relative" }}>
               {v.getVirtualItems().map((it) => {
                 const r = rows[it.index];
@@ -56,8 +65,8 @@ export function RequestsTab({ component, range, role, name, onClearName, onOpen 
                   <button
                     key={r.id + it.index}
                     onClick={() => onOpen(r)}
-                    style={{ position: "absolute", top: 0, left: 0, right: 0, height: it.size, transform: `translateY(${it.start}px)` }}
-                    className="grid grid-cols-[150px_64px_minmax(0,1fr)_180px_120px] items-center gap-3 border-b border-line/50 px-5 text-left text-[12.5px] hover:bg-bg-2"
+                    style={{ position: "absolute", top: 0, left: 0, right: 0, height: it.size, transform: `translateY(${it.start}px)`, gridTemplateColumns: columns.template }}
+                    className="grid items-center border-b border-line/50 px-5 text-left text-[12.5px] hover:bg-bg-2 [&>*]:pr-3"
                   >
                     <span className="tabular text-fg-3">{fmtTime(r.timestamp)}</span>
                     <span className={cn("flex items-center gap-1.5 tabular", failed ? "text-bad" : "text-fg-2")}><span className={cn("size-1.5 rounded-full", failed ? "bg-bad" : "bg-ok")} />{r.resultCode}</span>
@@ -70,6 +79,7 @@ export function RequestsTab({ component, range, role, name, onClearName, onOpen 
                   </button>
                 );
               })}
+            </div>
             </div>
           </div>
           <div className="shrink-0 border-t border-line px-5 py-1.5 text-[11.5px] text-fg-3">
