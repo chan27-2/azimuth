@@ -1,6 +1,6 @@
 #!/usr/bin/env swift
-// Renders the Busscope app icon (brand/icon-1024.png) from the same glyph as src/components/Logo.tsx:
-// a horizontal service bus with services attached above and below. Run: swift brand/make_icon.swift
+// Renders the Azimuth app icon (brand/icon-1024.png) from the same mark as AzimuthGlyph in src/ui/Logo.tsx:
+// a bearing ring with north marked and a needle swung off it. Run: swift brand/make_icon.swift
 import AppKit
 
 let size = 1024
@@ -30,7 +30,7 @@ cg.restoreGState()
 cg.saveGState()
 cg.addPath(squircle); cg.clip()
 cg.drawLinearGradient(gradient(rgb(0x2b2b2b), rgb(0x0b0b0b)), start: CGPoint(x: 512, y: 100), end: CGPoint(x: 512, y: 924), options: [])
-cg.setFillColor(rgb(0xffffff, 0.035)) // faint dot grid, like the topology canvas
+cg.setFillColor(rgb(0xffffff, 0.035)) // faint dot grid
 for gx in stride(from: 140, through: 900, by: 44) { for gy in stride(from: 140, through: 900, by: 44) {
   cg.fillEllipse(in: CGRect(x: gx - 3, y: gy - 3, width: 6, height: 6)) } }
 cg.drawRadialGradient(gradient(rgb(0x3b82f6, 0.30), rgb(0x3b82f6, 0)), startCenter: CGPoint(x: 512, y: 512), startRadius: 0,
@@ -40,27 +40,39 @@ cg.restoreGState()
 cg.addPath(CGPath(roundedRect: body.insetBy(dx: 2, dy: 2), cornerWidth: 183, cornerHeight: 183, transform: nil))
 cg.setStrokeColor(rgb(0xffffff, 0.10)); cg.setLineWidth(4); cg.strokePath()
 
-// Glyph: 24-unit viewBox mapped into a 600px square.
+// Glyph: 24-unit viewBox mapped into a 600px square (y grows downward, as in the SVG).
 let g = CGRect(x: 212, y: 212, width: 600, height: 600)
 let u = g.width / 24
-func r(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect { CGRect(x: g.minX + x * u, y: g.minY + y * u, width: w * u, height: h * u) }
-func fill(_ rect: CGRect, radius: CGFloat, with grad: CGGradient) {
-  cg.saveGState()
-  cg.addPath(CGPath(roundedRect: rect, cornerWidth: radius * u, cornerHeight: radius * u, transform: nil)); cg.clip()
-  cg.drawLinearGradient(grad, start: CGPoint(x: 0, y: rect.minY), end: CGPoint(x: 0, y: rect.maxY), options: [])
-  cg.restoreGState()
-}
+func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: g.minX + x * u, y: g.minY + y * u) }
+let centre = p(12, 12)
 
-cg.setLineCap(.round); cg.setLineWidth(1.6 * u); cg.setStrokeColor(rgb(0xededed, 0.55))
-for (x, y0, y1) in [(7.0, 7.5, 10.5), (17.0, 7.5, 10.5), (12.0, 13.5, 16.5)] as [(CGFloat, CGFloat, CGFloat)] {
-  cg.move(to: CGPoint(x: g.minX + x * u, y: g.minY + y0 * u))
-  cg.addLine(to: CGPoint(x: g.minX + x * u, y: g.minY + y1 * u))
-  cg.strokePath()
-}
-fill(r(2, 10.25, 20, 3.5), radius: 1.75, with: gradient(rgb(0x60a5fa), rgb(0x2563eb)))
-for rect in [r(4, 2.5, 6, 5), r(14, 2.5, 6, 5), r(9, 16.5, 6, 5)] {
-  fill(rect, radius: 1.5, with: gradient(rgb(0xffffff), rgb(0xd4d4d4)))
-}
+// The bearing: the angle from north to the needle, shaded.
+let r: CGFloat = 6.6
+cg.saveGState()
+cg.move(to: centre)
+for i in 0...24 { let a = CGFloat(i) / 24 * .pi / 4; cg.addLine(to: p(12 + r * sin(a), 12 - r * cos(a))) }
+cg.closePath()
+cg.setFillColor(rgb(0x3b82f6, 0.4)); cg.fillPath()
+cg.restoreGState()
+
+cg.setLineCap(.round)
+cg.setStrokeColor(rgb(0xededed, 0.6)); cg.setLineWidth(1.5 * u)
+cg.strokeEllipse(in: CGRect(x: centre.x - 9 * u, y: centre.y - 9 * u, width: 18 * u, height: 18 * u))
+// Cardinal ticks; north is the bright one.
+cg.setStrokeColor(rgb(0xededed, 0.45)); cg.setLineWidth(1.3 * u)
+for (a0, b0) in [(p(19.4, 12), p(17.6, 12)), (p(12, 19.4), p(12, 17.6)), (p(4.6, 12), p(6.4, 12))] { cg.move(to: a0); cg.addLine(to: b0); cg.strokePath() }
+cg.setStrokeColor(rgb(0xffffff)); cg.setLineWidth(1.7 * u)
+cg.move(to: p(12, 4.4)); cg.addLine(to: p(12, 6.8)); cg.strokePath()
+
+// Compass needle: blue tip on the bearing, grey tail opposite.
+func poly(_ pts: [CGPoint]) { cg.move(to: pts[0]); for q in pts.dropFirst() { cg.addLine(to: q) }; cg.closePath() }
+cg.saveGState()
+cg.setShadow(offset: .zero, blur: 44, color: rgb(0x3b82f6, 0.85))
+poly([p(16.67, 7.33), p(13.13, 13.13), p(10.87, 10.87)]); cg.setFillColor(rgb(0x60a5fa)); cg.fillPath()
+cg.restoreGState()
+poly([p(9.03, 14.97), p(13.13, 13.13), p(10.87, 10.87)]); cg.setFillColor(rgb(0xededed, 0.6)); cg.fillPath()
+cg.setFillColor(rgb(0xffffff))
+cg.fillEllipse(in: CGRect(x: centre.x - 0.9 * u, y: centre.y - 0.9 * u, width: 1.8 * u, height: 1.8 * u))
 
 NSGraphicsContext.restoreGraphicsState()
 try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "brand/icon-1024.png"))

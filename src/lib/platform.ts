@@ -1,5 +1,5 @@
 // Which OS we're on, for title bar layout and shortcut labels. The preload script passes process.platform.
-const os = (window as unknown as { busIpc?: { platform?: string } }).busIpc?.platform ?? "darwin";
+const os = (window as unknown as { azimuthIpc?: { platform?: string } }).azimuthIpc?.platform ?? "darwin";
 
 export const isMac = os === "darwin";
 export const isWindows = os === "win32";

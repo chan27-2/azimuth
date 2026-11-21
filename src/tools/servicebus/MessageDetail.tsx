@@ -1,16 +1,17 @@
 import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, ArrowRight, Binary, Braces, Check, ClipboardCopy, FileJson, FileText, GitCompare, ListTree, Radio, Table2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, ArrowUpRight, Binary, Braces, Check, ClipboardCopy, FileJson, FileText, GitCompare, ListTree, Radio, Table2 } from "lucide-react";
 import type { Item } from "./EntityView";
-import { fmtBytes, layerLabel, type Detection } from "../lib/detect";
-import { ago, cn, copy, fmtTime, traceIdOf } from "../lib/util";
-import * as G from "../lib/glossary";
-import { Button, Chip, CopyButton, Field, Switch, Tabs, Tip, type TipContent } from "./ui";
-import { JsonTree } from "./viewers/JsonTree";
-import { XmlTree } from "./viewers/XmlTree";
-import { HexView } from "./viewers/HexView";
-import { CsvTable } from "./viewers/CsvTable";
-import { DiffView } from "./viewers/DiffView";
+import { fmtBytes, layerLabel, type Detection } from "./detect";
+import { ago, cn, copy, fmtTime, traceIdOf } from "../../lib/util";
+import * as G from "../../lib/glossary";
+import { useNav } from "../../shell/nav";
+import { Button, Chip, CopyButton, Field, Switch, Tabs, Tip, type TipContent } from "../../ui/ui";
+import { JsonTree } from "../../ui/viewers/JsonTree";
+import { XmlTree } from "../../ui/viewers/XmlTree";
+import { HexView } from "../../ui/viewers/HexView";
+import { CsvTable } from "../../ui/viewers/CsvTable";
+import { DiffView } from "../../ui/viewers/DiffView";
 
 type View = "smart" | "raw" | "hex" | "props" | "diff";
 
@@ -30,6 +31,12 @@ export function MessageDetail({ item, compare }: { item: Item; compare: Item | n
   const [onlyChanges, setOnlyChanges] = useState(true);
   const { msg, det } = item;
   const traceId = traceIdOf(msg.applicationProperties);
+  const { go, subs, place } = useNav();
+  // Search the namespace's own subscription first; the rest follow.
+  const openTrace = (operationId: string, at?: string) => {
+    const home = place.tool === "sb" ? place.ns?.subscriptionId : undefined;
+    go({ tool: "ai", trace: { operationId, at, subIds: [...new Set([home, ...subs.map((s) => s.id)].filter(Boolean) as string[])] } });
+  };
   const ce = det.layers.find((l) => l.kind === "cloudevent");
 
   return (
@@ -46,6 +53,13 @@ export function MessageDetail({ item, compare }: { item: Item; compare: Item | n
           {msg.subject && <Tip content={G.chip.subject}><Chip>{msg.subject}</Chip></Tip>}
           {msg.correlationId && <Tip content={{ title: G.chip.correlation.title, body: <>{G.chip.correlation.body}<code className="mt-1 block break-all font-mono text-[11px] text-fg">{msg.correlationId}</code></> }}><Chip className="pr-0.5">corr {msg.correlationId.slice(0, 12)}…<CopyButton text={msg.correlationId} label="Copy correlation id" className="size-5" /></Chip></Tip>}
           {traceId && <Tip content={{ title: G.chip.trace.title, body: <>{G.chip.trace.body}<code className="mt-1 block break-all font-mono text-[11px] text-fg">{traceId}</code></> }}><Chip tone="accent" className="pr-0.5"><Radio />trace {traceId.slice(0, 10)}…<CopyButton text={traceId} className="size-5 text-accent hover:text-accent" label="Copy trace id" /></Chip></Tip>}
+          {traceId && (
+            <Tip content={{ title: "Open this trace in Insights", body: "Finds the operation in your Application Insights resources and shows every request, dependency and log it produced, across services." }}>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-accent hover:text-accent" onClick={() => openTrace(traceId, msg.enqueuedTime ?? undefined)}>
+                <ArrowUpRight /> Insights
+              </Button>
+            </Tip>
+          )}
           {msg.sessionId && <Tip content={G.chip.session}><Chip>session {msg.sessionId}</Chip></Tip>}
           {msg.deliveryCount > 0 && <Tip content={G.ui.deliveryCount}><Chip tone={msg.deliveryCount > 3 ? "warn" : "default"}>delivered {msg.deliveryCount}×</Chip></Tip>}
         </div>

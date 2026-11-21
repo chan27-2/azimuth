@@ -1,15 +1,16 @@
 import { useMemo, useRef, useState } from "react";
+import { api } from "../../lib/api";
 import { AnimatePresence, motion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Box, ChevronRight, GitCompare, Inbox, KeyRound, Layers, Lock, Network, RefreshCw, ShieldCheck, Skull, X } from "lucide-react";
-import { canRead, type Access, type Auth, type Entities, type EntityRef, type Message, type Sub } from "../types";
-import { fetchQuery, useQuery, peekCache } from "../lib/query";
+import { canRead, type Access, type Auth, type Entities, type EntityRef, type Message, type Sub } from "../../types";
+import { fetchQuery, useQuery, peekCache } from "../../lib/query";
 import { AccessPanel } from "./AccessPanel";
-import { b64ToBytes, detect, type Detection } from "../lib/detect";
-import { ago, cn, envOf, fmtTime } from "../lib/util";
-import { AnimatedNumber, Button, Chip, Empty, EnvBadge, Field, Header, NoDrag, Select, Spinner, Tabs, Tip } from "./ui";
-import * as G from "../lib/glossary";
-import { mod, modClick } from "../lib/platform";
+import { b64ToBytes, detect, type Detection } from "./detect";
+import { ago, cn, envOf, fmtTime } from "../../lib/util";
+import { AnimatedNumber, Button, Chip, Empty, EnvBadge, Field, Header, NoDrag, Select, Spinner, Tabs, Tip } from "../../ui/ui";
+import * as G from "../../lib/glossary";
+import { mod, modClick } from "../../lib/platform";
 import { MessageDetail } from "./MessageDetail";
 
 export type Item = { msg: Message; det: Detection };
@@ -28,13 +29,13 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
   const [dlq, setDlq] = useState<boolean>(entity.dlq ?? (!!counts && counts.active === 0 && counts.deadLetter > 0));
   const [max, setMax] = useState(250);
   const accessKey = `access:${entity.ns.id}`;
-  const access = useQuery<Access>(accessKey, () => window.bus.access(entity.ns));
-  const refreshAccess = () => fetchQuery(accessKey, () => window.bus.access(entity.ns), true);
+  const access = useQuery<Access>(accessKey, () => api.sb.access(entity.ns));
+  const refreshAccess = () => fetchQuery(accessKey, () => api.sb.access(entity.ns), true);
   // Don't peek until we know we're allowed to; if the permission check itself fails, try anyway.
   const allowed = access.data ? canRead(access.data) : !!access.error;
   const key = allowed ? `peek:${refKey(entity)}|${dlq ? "dlq" : "active"}|${max}|${access.data?.connectionString ? "cs" : "id"}` : null;
   const q = useQuery<Peeked>(key, async () => {
-    const r = await window.bus.peek({
+    const r = await api.sb.peek({
       ns: entity.ns,
       ...(entity.kind === "queue" ? { queue: entity.queue } : { topic: entity.topic, subscription: entity.subscription }),
       deadLetter: dlq,
@@ -119,7 +120,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
                 {q.data.auth === "entra" ? <ShieldCheck /> : <KeyRound />}
                 <span className="hidden min-[1600px]:inline">{{ entra: "Entra ID", sas: "SAS via ARM", connection: "Connection string" }[q.data.auth]}</span>
                 {q.data.auth === "connection" && (
-                  <Button variant="ghost" size="icon-sm" aria-label="Forget connection string" className="text-accent hover:text-accent" onClick={async () => { await window.bus.clearConnectionString({ ns: entity.ns }); refreshAccess(); }}>
+                  <Button variant="ghost" size="icon-sm" aria-label="Forget connection string" className="text-accent hover:text-accent" onClick={async () => { await api.sb.clearConnectionString({ ns: entity.ns }); refreshAccess(); }}>
                     <X />
                   </Button>
                 )}

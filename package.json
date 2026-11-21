@@ -1,5 +1,5 @@
 {
-  "name": "busscope",
+  "name": "azimuth",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env VITE_DEV=1 electron .\"",
     "build": "vite build",
     "start": "vite build && electron .",
-    "demo": "vite build && cross-env BUSSCOPE_DEMO=1 electron .",
-    "dev:demo": "concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env VITE_DEV=1 BUSSCOPE_DEMO=1 electron .\"",
+    "demo": "vite build && cross-env AZIMUTH_DEMO=1 electron .",
+    "dev:demo": "concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env VITE_DEV=1 AZIMUTH_DEMO=1 electron .\"",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
@@ -40,8 +40,8 @@
     "vite": "^8.3.8",
     "wait-on": "^9.5.1"
   },
-  "productName": "Busscope",
-  "description": "A desktop explorer for Azure Service Bus that understands what is inside your messages.",
+  "productName": "Azimuth",
+  "description": "A fast desktop console for Azure: Service Bus, Functions and Application Insights, signed in through the az CLI.",
   "license": "MIT",
   "engines": {
     "node": ">=22.12"

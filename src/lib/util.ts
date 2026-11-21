@@ -36,3 +36,15 @@ export function traceIdOf(props: Record<string, unknown>): string | null {
 export async function copy(text: string) {
   await navigator.clipboard.writeText(text);
 }
+
+export function fmtMs(ms: number | null | undefined) {
+  if (ms == null || !Number.isFinite(ms)) return "—";
+  if (ms < 1) return `${ms.toFixed(2)}ms`;
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+export const SEVERITY = ["Verbose", "Info", "Warning", "Error", "Critical"] as const;
+
+export const pct = (part: number, whole: number) => (whole ? `${((part / whole) * 100).toFixed(part / whole < 0.1 ? 2 : 1)}%` : "0%");

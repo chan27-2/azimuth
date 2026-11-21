@@ -1,21 +1,10 @@
-import { execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
-import { AzureCliCredential } from "@azure/identity";
+// Service Bus: namespaces, entities and counts over ARM; peek over the data plane. Peek only, by design.
 import { ServiceBusManagementClient } from "@azure/arm-servicebus";
 import { ServiceBusClient } from "@azure/service-bus";
 import Long from "long";
+import { AppError, credFor, permissions, rgOf } from "./core.js";
 
 const toLong = (b) => Long.fromString(b.toString());
-
-const run = promisify(execFile);
-
-// az can be signed in to several accounts and tenants at once. Each subscription gets a credential that
-// asks az for a token as the account that owns it.
-const credentials = new Map();
-const credFor = (subId) => {
-  if (!credentials.has(subId)) credentials.set(subId, new AzureCliCredential({ subscription: subId }));
-  return credentials.get(subId);
-};
 
 const mgmtClients = new Map();
 const mgmt = (subId) => {
@@ -36,59 +25,10 @@ const counts = (c = {}) => ({
   transfer: c.transferMessageCount ?? 0,
 });
 
-export async function account() {
-  const { stdout } = await run("az", ["account", "show", "-o", "json"]);
-  const a = JSON.parse(stdout);
-  return { user: a.user?.name, tenantId: a.tenantId, defaultSubscription: a.name };
-}
-
-// Every enabled subscription from every account az is signed in to. Tenant-level entries
-// (signed in to a tenant with no subscriptions) have id === tenantId and are skipped.
-export async function subscriptions() {
-  const { stdout } = await run("az", ["account", "list", "--all", "-o", "json"]);
-  return JSON.parse(stdout)
-    .filter((s) => s.state === "Enabled" && s.id && s.id !== s.tenantId)
-    .map((s) => ({ id: s.id, name: s.name, tenantId: s.tenantId, user: s.user?.name ?? "unknown", isDefault: !!s.isDefault }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-// Runs `az login`, which opens the browser and adds an account alongside the existing ones. az can't tell
-// when the browser tab is closed, so the UI offers Cancel, which kills the process.
-let login = null;
-export function addAccount() {
-  if (login) return login.done;
-  const child = spawn("az", ["login", "--only-show-errors", "-o", "none"], { stdio: ["ignore", "ignore", "pipe"] });
-  let stderr = "";
-  child.stderr.on("data", (d) => (stderr += d));
-  const done = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => child.kill(), 5 * 60_000);
-    child.on("close", (code, signal) => {
-      clearTimeout(timer);
-      login = null;
-      if (code === 0) resolve(true);
-      else if (signal) reject(Object.assign(new Error("Sign-in cancelled."), { code: "CANCELLED" }));
-      else reject(new Error(stderr.trim().split("\n").pop() || `az login exited with code ${code}`));
-    });
-    child.on("error", (e) => { clearTimeout(timer); login = null; reject(e); });
-  });
-  login = { child, done };
-  return done;
-}
-
-export async function cancelAddAccount() {
-  login?.child.kill();
-  return true;
-}
-
-const rgOf = (id) => id.split("/")[4];
-
 export async function namespaces(subId) {
   const list = await collect(mgmt(subId).namespaces.list()).catch((e) => {
-    if (e?.statusCode === 404 || /SubscriptionNotFound|could not be found/i.test(e?.message ?? "")) {
-      const err = new Error("Azure says this subscription no longer exists, but az still has it cached. Run `az account clear` and `az login` to refresh.");
-      err.code = "SUBSCRIPTION_NOT_FOUND";
-      throw err;
-    }
+    if (e?.statusCode === 404 || /SubscriptionNotFound|could not be found/i.test(e?.message ?? ""))
+      throw new AppError("Azure says this subscription no longer exists, but az still has it cached. Run `az account clear` and `az login` to refresh.", "SUBSCRIPTION_NOT_FOUND");
     throw e;
   });
   return list.map((n) => ({
@@ -170,31 +110,14 @@ const RECEIVE = "Microsoft.ServiceBus/namespaces/messages/receive/action";
 const LIST_KEYS = "Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action";
 const READ = "Microsoft.ServiceBus/namespaces/read";
 
-const wildcard = (pattern) => new RegExp("^" + pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$", "i");
-const permits = (allow, deny, op) => allow.some((p) => wildcard(p).test(op)) && !deny.some((p) => wildcard(p).test(op));
-
 const manualConnections = new Map(); // ns id -> connection string, memory only
 const accessCache = new Map(); // ns id -> { at, value }
 
 export async function access(ns) {
   const hit = accessCache.get(ns.id);
   if (hit && Date.now() - hit.at < 5 * 60_000) return { ...hit.value, connectionString: manualConnections.has(ns.id) };
-  const { token } = await credFor(ns.subscriptionId).getToken("https://management.azure.com/.default");
-  const res = await fetch(`https://management.azure.com${ns.id}/providers/Microsoft.Authorization/permissions?api-version=2022-04-01`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`Couldn't read your permissions on ${ns.name} (HTTP ${res.status}).`);
-  const perms = (await res.json()).value ?? [];
-  const actions = perms.flatMap((p) => p.actions ?? []);
-  const notActions = perms.flatMap((p) => p.notActions ?? []);
-  const dataActions = perms.flatMap((p) => p.dataActions ?? []);
-  const notDataActions = perms.flatMap((p) => p.notDataActions ?? []);
-  const value = {
-    read: permits(actions, notActions, READ),
-    receive: permits(dataActions, notDataActions, RECEIVE),
-    listKeys: permits(actions, notActions, LIST_KEYS),
-    scope: ns.id,
-  };
+  const p = await permissions(ns.subscriptionId, ns.id);
+  const value = { read: p.can(READ), receive: p.canData(RECEIVE), listKeys: p.can(LIST_KEYS), scope: ns.id };
   accessCache.set(ns.id, { at: Date.now(), value });
   return { ...value, connectionString: manualConnections.has(ns.id) };
 }
@@ -244,11 +167,9 @@ async function dataClient(ns, auth) {
 const isAuthError = (e) =>
   [e, ...(e?.errors ?? [])].some((x) => /unauthori[sz]ed|401|403|claim|not authorized|authorizationfailed/i.test(`${x?.code} ${x?.message}`));
 
-class NoAccessError extends Error {
+class NoAccessError extends AppError {
   constructor(ns, detail) {
-    super(`You can see ${ns.name}'s counts, but you don't have permission to read its messages.`);
-    this.code = "NO_ACCESS";
-    this.detail = detail;
+    super(`You can see ${ns.name}'s counts, but you don't have permission to read its messages.`, "NO_ACCESS", detail);
   }
 }
 

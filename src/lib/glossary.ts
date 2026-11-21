@@ -1,12 +1,12 @@
 // Plain-English explanations shown in tooltips. One place, so wording stays consistent.
-import type { Layer } from "./detect";
+import type { Layer } from "../tools/servicebus/detect";
 import type { Env } from "./util";
 import { modClick } from "./platform";
 
 type Entry = { title: string; body?: string };
 
 export const env: Record<Env, Entry> = {
-  prod: { title: "Production", body: "The name contains “prod”. Busscope only peeks, but treat what you see here as live customer data." },
+  prod: { title: "Production", body: "The name contains “prod”. Treat what you see here as live customer data. Busscope only peeks, and running a function asks you to confirm." },
   preview: { title: "Preview environment", body: "The name contains “preview”." },
   dev: { title: "Development", body: "The name contains “dev”." },
   ci: { title: "CI environment", body: "The name contains “ci”." },
@@ -21,15 +21,15 @@ export const access = {
   whyCounts: "Counts, topics and filter rules come from Azure Resource Manager, which a Reader role can see. Message bodies come from the Service Bus data plane, which needs its own permission.",
   role: "Azure Service Bus Data Receiver",
   roleWhy: "A built-in role that lets you peek and receive messages, and nothing else. Scoped to this namespace, it doesn't touch anything else in the subscription.",
-  connWhy: "A shared access policy with Listen rights, e.g. from Key Vault or the namespace's “Shared access policies” page. Busscope keeps it in memory until you quit and never writes it to disk.",
-  noAccount: "This subscription came from a different az account. Busscope asks az for a token as that account.",
+  connWhy: "A shared access policy with Listen rights, e.g. from Key Vault or the namespace's “Shared access policies” page. Azimuth keeps it in memory until you quit and never writes it to disk.",
+  noAccount: "This subscription came from a different az account. Azimuth asks az for a token as that account.",
 };
 
 export const auth = {
   entra: { title: "Signed in with Entra ID", body: "Your az CLI identity has a Service Bus data role on this namespace, so Busscope reads messages as you." },
   connection: {
     title: "Using your connection string",
-    body: "You pasted a connection string for this namespace. It's kept in memory until you quit Busscope. Click × to forget it now.",
+    body: "You pasted a connection string for this namespace. It's kept in memory until you quit Azimuth. Click × to forget it now.",
   },
   sas: {
     title: "Using a SAS key read over ARM",
@@ -162,4 +162,59 @@ export const props: Record<string, string> = {
   DeadLetterReason: "Why the message was dead-lettered.",
   DeadLetterErrorDescription: "Extra detail recorded when it was dead-lettered.",
   DeadLetterSource: "The entity it was dead-lettered from, when it came through auto-forwarding.",
+};
+
+// ─── Application Insights ────────────────────────────────────────────────────
+export const ai = {
+  operationId: "Every request, dependency call and log written while handling one operation shares this id, even across services. It's the trace id from the W3C traceparent header.",
+  role: "cloud_RoleName: the service that sent this telemetry. With OpenTelemetry it's the service name; otherwise usually the app's name.",
+  noTrace: "No telemetry with this operation id in the time window. It may be in another Application Insights resource, sampled out, or not ingested yet (ingestion usually takes 30 seconds to 3 minutes).",
+  noLogs: "Nothing in this operation called a logger, or those logs were filtered by the app's log level.",
+  missingParents: "Some spans point to a parent span that isn't in this resource, usually because the calling service sends telemetry to a different Application Insights resource. Azimuth can search the other resources in your subscriptions and stitch the operation together.",
+  range: { title: "Time range", body: "Every query is limited to this window, which keeps them fast on busy resources." },
+  roleFilter: { title: "Service", body: "Only telemetry from this cloud_RoleName. Useful when several apps share one Application Insights resource." },
+  requests: { title: "Requests", body: "Incoming operations: HTTP requests and function invocations. Counts respect sampling (itemCount)." },
+  failed: { title: "Failed requests", body: "Requests whose success flag is false, such as HTTP 5xx and functions that threw." },
+  p50: { title: "Median duration (p50)", body: "Half of requests finished faster than this." },
+  p95: { title: "95th percentile duration", body: "95% of requests finished faster than this. A better measure of what slow users experience." },
+  exceptions: { title: "Exceptions", body: "Exceptions logged by the apps, handled or not." },
+  depFailed: { title: "Failed dependency calls", body: "Outgoing calls (SQL, HTTP, Service Bus…) that failed. Often the root cause behind failed requests." },
+  timeline: { title: "Requests over time", body: "Grey is all requests, red is failures. Hover a bar for numbers." },
+  live: { title: "Live", body: "Checks for new logs every 10 seconds. Telemetry reaches Application Insights 30 seconds to 3 minutes after it's written, so live means recent, not instant." },
+  kql: { title: "KQL", body: "Kusto Query Language, the same as Logs in the Azure portal. Tables: requests, dependencies, traces, exceptions, customEvents, pageViews. The time range applies on top of your query, and results stop at 10,000 rows." },
+  sampling: "This resource keeps a sample of telemetry. Counts are scaled up by itemCount, but individual operations may be missing.",
+  findTrace: { title: "Find trace", body: "Paste an operation id, trace id or traceparent. Azimuth searches every Application Insights resource in the subscriptions you show, six at a time." },
+};
+
+// ─── Functions ───────────────────────────────────────────────────────────────
+export const fn = {
+  trigger: (type: string): Entry => {
+    const t: Record<string, Entry> = {
+      httpTrigger: { title: "HTTP trigger", body: "Runs when its URL is called. Run sends a real HTTP request to it." },
+      timerTrigger: { title: "Timer trigger", body: "Runs on a CRON schedule (seconds minutes hours day month weekday), in UTC unless WEBSITE_TIME_ZONE is set. Run starts it once now." },
+      serviceBusTrigger: { title: "Service Bus trigger", body: "Runs for each message on a queue or topic subscription. Run passes your input as the message body, without touching the queue." },
+      queueTrigger: { title: "Storage queue trigger", body: "Runs for each message on an Azure Storage queue. Run passes your input as the message, without touching the queue." },
+      blobTrigger: { title: "Blob trigger", body: "Runs when a blob is created or updated. Run passes your input as the blob path." },
+      eventHubTrigger: { title: "Event Hubs trigger", body: "Runs for batches of events from an event hub. Run passes your input as one event." },
+      eventGridTrigger: { title: "Event Grid trigger", body: "Runs when Event Grid delivers an event. Run passes your input as the event." },
+      cosmosDBTrigger: { title: "Cosmos DB trigger", body: "Runs on changes to a Cosmos DB container (the change feed). Run passes your input as the changed documents." },
+      activityTrigger: { title: "Durable activity", body: "A step called by a Durable orchestration. It can't be run on its own." },
+      orchestrationTrigger: { title: "Durable orchestrator", body: "Coordinates activities. Start it through its HTTP starter function instead." },
+      entityTrigger: { title: "Durable entity", body: "Stateful Durable entity. It can't be run on its own." },
+    };
+    return t[type] ?? { title: type, body: "Run passes your input to the function host's admin endpoint." };
+  },
+  run: { title: "Run", body: "Executes the function for real, in Azure, with the input you give. It's sent once and never retried." },
+  runProd: "This is a production app. The function will do real work: send real emails, write real data, call real services. Type the app's name to confirm.",
+  noRunAccess: "Running needs permission to read the app's keys (Microsoft.Web/sites/host/listkeys/action), which Website Contributor and Contributor include. History and logs only need Reader.",
+  keys: "Azimuth reads the key it needs from Azure for each run and keeps it in memory. It never shows it or writes it to disk.",
+  link: (via: string) => via === "settings"
+    ? "Found from the app's APPLICATIONINSIGHTS_CONNECTION_STRING setting."
+    : via === "telemetry"
+      ? "You can't read this app's settings, so Azimuth asked each Application Insights resource in the subscription which service ran these functions recently."
+      : "You picked this resource. Azimuth remembers the choice on this machine.",
+  ingest: "Application Insights shows an invocation 30 seconds to 3 minutes after it ran. Azimuth keeps checking for up to five minutes.",
+  authLevel: (l: string) => l === "anonymous" ? "Anyone with the URL can call it." : l === "admin" ? "Needs the app's master key. Azimuth adds it for you." : "Needs a function key. Azimuth adds it for you.",
+  disabled: "Disabled in Azure (AzureWebJobs.<name>.Disabled). It doesn't run on its trigger and Run won't start it.",
+  invocation: { title: "Invocation", body: "One run of the function. Click to see everything it did: calls it made, logs it wrote and exceptions it threw." },
 };

@@ -39,7 +39,9 @@ export function peekCache<T>(key: string) {
   return (cache.get(key) as Entry<T> | undefined)?.data;
 }
 
-export function invalidate(prefix: string) {
-  for (const k of [...cache.keys()]) if (k.startsWith(prefix)) cache.delete(k);
+// Drops cached results so they load again. Takes a key prefix or a predicate.
+export function invalidate(match: string | ((key: string) => boolean)) {
+  const hit = typeof match === "string" ? (k: string) => k.startsWith(match) : match;
+  for (const k of [...cache.keys()]) if (hit(k)) cache.delete(k);
   emit();
 }

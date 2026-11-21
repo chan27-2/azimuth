@@ -10,7 +10,7 @@ import { cn, copy, compact, type Env } from "../lib/util";
 export const ring = "outline-none focus-visible:ring-2 focus-visible:ring-fg/15 focus-visible:ring-offset-0";
 
 // ─── Button ──────────────────────────────────────────────────────────────────
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "secondary" | "ghost"; size?: "sm" | "md" | "icon" | "icon-sm" };
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "danger" | "secondary" | "ghost"; size?: "sm" | "md" | "icon" | "icon-sm" };
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = "secondary", size = "md", className, ...p }, ref) {
   return (
     <button
@@ -19,6 +19,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       className={cn(
         "inline-flex shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-[background-color,border-color,color] duration-150 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.5 [&_svg]:shrink-0",
         ring,
+        variant === "primary" && "border border-fg bg-fg text-bg hover:bg-fg/85",
+        variant === "danger" && "border border-bad bg-bad text-white hover:bg-bad/85",
         variant === "secondary" && "border border-line bg-bg-1 text-fg-2 hover:border-line-2 hover:bg-bg-2 hover:text-fg",
         variant === "ghost" && "text-fg-3 hover:bg-bg-2 hover:text-fg",
         size === "md" && "h-8 px-3 text-[13px]",

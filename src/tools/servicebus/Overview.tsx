@@ -1,16 +1,17 @@
 import { useEffect, useMemo } from "react";
+import { api } from "../../lib/api";
 import { BaseEdge, Background, BackgroundVariant, Controls, EdgeLabelRenderer, getBezierPath, Handle, Position, ReactFlow, useNodesState, type Edge, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, Box, Inbox, Layers, Lock, Network, RefreshCw, Skull } from "lucide-react";
-import { canRead, type Access, type Entities, type EntityRef, type Namespace } from "../types";
-import { useQuery } from "../lib/query";
-import { ago, cn, envOf } from "../lib/util";
-import { AnimatedNumber, Button, EnvBadge, Header, NoDrag, Spinner, Tip, type TipContent } from "./ui";
-import * as G from "../lib/glossary";
+import { canRead, type Access, type Entities, type EntityRef, type Namespace } from "../../types";
+import { useQuery } from "../../lib/query";
+import { ago, cn, envOf } from "../../lib/util";
+import { AnimatedNumber, Button, EnvBadge, Header, NoDrag, Spinner, Tip, type TipContent } from "../../ui/ui";
+import * as G from "../../lib/glossary";
 
 export function Overview({ ns, onSelect }: { ns: Namespace; onSelect: (e: EntityRef) => void }) {
-  const q = useQuery<Entities>(`ent:${ns.id}`, () => window.bus.entities(ns));
+  const q = useQuery<Entities>(`ent:${ns.id}`, () => api.sb.entities(ns));
   const env = envOf(ns.name);
-  const access = useQuery<Access>(`access:${ns.id}`, () => window.bus.access(ns));
+  const access = useQuery<Access>(`access:${ns.id}`, () => api.sb.access(ns));
   const totals = useMemo(() => {
     const t = { topics: 0, subs: 0, queues: 0, active: 0, dlq: 0 };
     if (!q.data) return t;

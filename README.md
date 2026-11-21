@@ -1,82 +1,108 @@
-<p align="center"><img src="docs/icon.png" width="96" height="96" alt="Busscope icon"></p>
+<p align="center"><img src="docs/icon.png" width="96" height="96" alt="Azimuth icon"></p>
 
-<h1 align="center">Busscope</h1>
+<h1 align="center">Azimuth</h1>
 
-<p align="center">A desktop explorer for Azure Service Bus that works out what's inside your messages.</p>
+<p align="center">A fast desktop console for Azure: Service Bus, Functions and Application Insights, signed in through your az CLI.</p>
+
+![Azimuth home](docs/home.webp)
+
+The Azure portal is slow and scatters one problem across five blades. Azimuth puts the things you check while debugging side by side in one window, with the same look in every tool:
+
+- **Busscope** for Service Bus: topology, peek and decode messages, dead-letter reasons. Read-only.
+- **Functions**: every function and its trigger, invocation history, the full trace of any invocation, and Run with confirmation.
+- **Insights** for Application Insights: requests, failures and logs, any operation as a waterfall across services, and raw KQL.
+
+They link to each other. A Service Bus message with a `traceparent` opens its trace in Insights. A function invocation opens with every call it made and every log it wrote. Paste any trace id into Find trace and Azimuth searches every Application Insights resource you can see.
+
+## Busscope (Service Bus)
 
 ![Topology of a Service Bus namespace](docs/topology.webp)
 
-Most Service Bus tools show a message body as a block of text. Busscope decodes it. It unwraps gzip, base64, CloudEvents and MassTransit envelopes, then shows the payload as a JSON tree, an XML tree, a CSV table or a hex dump, depending on what the bytes really contain. It signs in with your existing `az login` (every account you're signed in to), finds every namespace you can see, and only peeks. It never locks, completes or moves a message.
+- **Topology.** Topics, subscriptions, dead-letter queues and auto-forward targets as a graph. Arrows carry each subscription's filter; hover for the full SQL or correlation filter and what it means.
+- **Decoding in steps.** Unwraps gzip, base64, byte-order marks, double-encoded JSON, CloudEvents and MassTransit envelopes, then shows a JSON tree, XML tree, CSV table or hex dump based on what the bytes really are. If the declared `Content-Type` disagrees with the body, it says so.
+- **Readable dead letters.** Grouped by reason, a clickable histogram of enqueue times, delivery counts next to the payload.
+- **Diff** two messages (⌘-click, or Ctrl+click on Windows and Linux), and **copy** any value, its JSONPath, the payload or the whole message.
 
-## What it does
+![Dead-letter queue](docs/dlq.webp)
 
-- **Finds your namespaces.** Lists every subscription and Service Bus namespace your az CLI identity can see. Namespaces whose names contain `prod`, `preview`, `dev` or `ci` get a matching badge.
-- **Maps the topology.** Each namespace is drawn as a graph: topics, subscriptions, dead-letter queues and auto-forward targets. Arrows carry the subscription's filter rule. Hover an arrow to read the full SQL or correlation filter and what it means. Nodes can be dragged.
-- **Decodes each message in steps.** The detail pane shows every step, for example `AMQP data → base64 → gzip 176 B → 211 B → JSON`. If the declared `Content-Type` disagrees with the body, Busscope says so.
-- **Makes dead letters readable.** Messages are grouped by dead-letter reason, there's a histogram of enqueue times you can click to filter, and the delivery count and error description sit next to the payload.
-- **Diffs two messages.** ⌘-click a second message to compare payloads and properties path by path, e.g. a failed message against one that went through.
-- **Lets you copy anything.** One click copies a single value, its JSONPath, the decoded payload, or the whole message (body, broker properties and application properties) as JSON.
-- **Explains itself.** Most labels have a tooltip in plain English: what `[type]` in a filter refers to, what an AMQP data section is, why a message hit `MaxDeliveryCountExceeded`.
+Busscope only peeks. Peeking doesn't lock messages or change delivery counts, and there are no send, complete or purge actions.
 
-| | |
-|---|---|
-| ![Dead-letter queue with reasons and histogram](docs/dead-letters.webp) | ![The decoding steps for a compressed message](docs/pipeline.webp) |
-| ![Diff between two messages](docs/diff.webp) | ![Tooltip explaining a subscription filter](docs/filter-tooltip.webp) |
+## Functions
+
+![A function's invocations with the trace of a failed one](docs/fn.webp)
+
+- **Every function app and function** in your subscriptions, with its trigger in plain words: `POST /api/orders`, `order-events / fulfilment`, `Every day at 02:00`.
+- **Numbers per function** for the chosen time range: runs, failure rate, p50, p95, last run.
+- **Invocation history.** Pick an invocation to see its trace: dependency calls, logs and exceptions with stack traces.
+- **Live logs** for the whole app.
+- **Run.** HTTP functions get a real request (method, path, query, headers, body). Other triggers go through the host's admin endpoint, like the portal's Test/Run. After the response, Azimuth waits for the invocation to reach Application Insights and selects it, with its trace.
+
+Run is the only thing in Azimuth that changes anything, so it's careful:
+
+- It is sent once and never retried.
+- Production apps (a name containing `prod`) need the app name typed back. The main process checks this too, not only the UI.
+- Function keys are fetched in the main process for each run, held in memory, and never shown or written to disk.
+- Durable activities, orchestrators and entities can't be run directly, so Run is disabled for them, as it is for disabled functions and stopped apps.
+- Running needs permission to read the app's keys (Website Contributor or Contributor). With Reader you still get history, traces and logs.
+
+**Finding the app's telemetry.** With OpenTelemetry, telemetry often names the service rather than the function app, so Azimuth looks in this order: the instrumentation key in the app's settings, if you can read them; otherwise it asks each Application Insights resource in the subscription which service ran these function names in the last 3 days (one small query each, six at a time); otherwise you pick it once and Azimuth remembers.
+
+## Insights (Application Insights)
+
+![An operation as a waterfall across three services](docs/trace.webp)
+
+- **Overview.** Requests, failure rate, p50 and p95, exceptions and failed dependency calls, a timeline, top operations and top exceptions. Filter by service (`cloud_RoleName`) when several apps share a resource.
+- **Requests and Logs** with filters, and a live tail that polls every 10 seconds for newer entries only.
+- **Traces.** Requests and dependencies nested by parent span, logs pinned to the span that wrote them, service colours, and a detail pane with properties and stack traces. If part of an operation was logged to another resource, **Look in other resources** stitches it together.
+- **Query.** Write KQL against the resource, with examples, CSV and JSON export, and a click-through to any row's trace.
+
+![Insights overview](docs/ai.webp)
+
+Every built-in query is limited by the time range and a row cap, and KQL can't change data, so browsing production is safe. Free-form queries are capped at 10,000 rows. Telemetry takes 30 seconds to 3 minutes to reach Application Insights, so live means recent, not instant.
 
 ## Run it
 
 You need Node 22.12 or newer and, for real data, the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) signed in with `az login`.
 
 ```bash
-git clone https://github.com/chan27-2/busscope.git
-cd busscope
-npm install        # also downloads Electron and names the dev bundle Busscope
+git clone https://github.com/chan27-2/busscope.git azimuth
+cd azimuth
+npm install        # also downloads Electron and names the dev bundle Azimuth
 npm start          # builds the UI and opens the app
 ```
 
-There are no packaged builds yet; you run it from source.
+There are no packaged builds yet; you run it from source. To try it without Azure, `npm run demo` uses a made-up "Acme" estate for all three tools. For hot reload: `npm run dev` (or `npm run dev:demo`).
 
-To try it without Azure, run the demo, which uses a made-up "Acme" estate:
+Shortcuts: ⌘K (Ctrl+K) jumps to anything, ⌘1 / ⌘2 / ⌘3 switch tools, ⌘0 goes home, ⌘B toggles the sidebar, ⌘[ goes up a level.
 
-```bash
-npm run demo
+## Sign-in and permissions
+
+Azimuth uses your az CLI login. If `az` is signed in to several accounts or tenants (`az account list --all`), every subscription shows up, grouped by account, and each token is requested as the account that owns that subscription. The accounts menu at the bottom of the sidebar chooses which accounts and subscriptions every tool shows, and **Add account** runs `az login` (press Cancel if you close the browser instead).
+
+What you can do depends on your Azure roles, and Azimuth checks before trying, so it can explain instead of failing:
+
+| | Needs |
+|---|---|
+| Lists, counts, topology, history, traces, logs, KQL | Reader |
+| Peek Service Bus messages | Azure Service Bus Data Receiver, or rights to read the namespace's SAS key, or a connection string you paste (kept in memory only) |
+| Run a function | Permission to read the app's keys (Website Contributor or Contributor) |
+
+## Under the hood
+
+Electron, React 19, Tailwind CSS 4, Motion, React Flow and TanStack Virtual. All Azure calls happen in the main process (`electron/`): the window can only call the channels listed in `electron/main.js`, and secrets never cross into it. Reads retry on throttling with backoff; anything that changes state is sent once. Application Insights is queried through the ARM query endpoint with the same token as everything else.
+
+```
+electron/core.js        az accounts, credentials, ARM client, permissions
+electron/servicebus.js  Busscope
+electron/functions.js   Functions, including Run
+electron/insights.js    Application Insights queries
+electron/demo/          fictional data for npm run demo
+src/ui/                 the shared design system
+src/shell/              sidebar, tool rail, home, ⌘K
+src/tools/              one folder per tool
 ```
 
-For development with hot reload: `npm run dev` (or `npm run dev:demo`).
-
-## How it signs in
-
-Busscope uses your az CLI login. If `az` is signed in to more than one account or tenant (`az account list --all`), every subscription shows up, grouped by account, and Busscope asks `az` for each token as the account that owns that subscription. The accounts menu at the bottom of the sidebar lets you tick which accounts and subscriptions appear, so a long list doesn't crowd the sidebar. It also has **Add account**, which runs `az login`; if you close the browser instead of signing in, press Cancel.
-
-Seeing counts and reading messages need different permissions:
-
-- **Counts, topics and filter rules** come from Azure Resource Manager. Reader is enough.
-- **Messages** come from the Service Bus data plane.
-
-Before peeking, Busscope asks Azure what you're allowed to do on the namespace and picks the first option that works:
-
-1. **A connection string you pasted** for that namespace. It's kept in memory and forgotten when you quit.
-2. **Your own identity**, if you have **Azure Service Bus Data Receiver** (or Owner).
-3. **The namespace's SAS key**, if you have management rights that let you read it (Contributor). The header then shows **SAS via ARM**.
-
-If none of these works, the namespace gets a lock icon in the sidebar. Opening one of its queues or subscriptions shows what's missing, a ready-made `az role assignment` command to send to an admin, and a box to paste a connection string instead.
-
-Busscope is read-only. It peeks, which doesn't lock messages or change delivery counts, and it has no send, resend, complete or purge actions.
-
-## Format detection
-
-For each message, Busscope:
-
-1. Notes the declared `ContentType`, but treats it only as a hint.
-2. Unwraps layers and runs detection again after each one: gzip (`1F 8B`), base64 text, a UTF-8 byte-order mark, double-encoded JSON strings, CloudEvents (`specversion`, with `data` or `data_base64`) and MassTransit envelopes.
-3. Sniffs the result: JSON, XML, CSV (consistent delimiter), plain text, or binary. For binary it looks at magic bytes for Avro, ZIP, PDF and PNG, and guesses MessagePack or Protobuf.
-4. Falls back to a hex view. Protobuf can't be decoded without a schema.
-
-The detector is a single file, [`src/lib/detect.ts`](src/lib/detect.ts).
-
-## Stack
-
-Electron, React 19, Tailwind CSS 4, Motion, React Flow and TanStack Virtual. On the Azure side it uses `@azure/service-bus`, `@azure/arm-servicebus` and `@azure/identity`. The app icon is drawn by [`brand/make_icon.swift`](brand/make_icon.swift).
+The message format detector is [`src/tools/servicebus/detect.ts`](src/tools/servicebus/detect.ts). The app icon is drawn by [`brand/make_icon.swift`](brand/make_icon.swift).
 
 ## License
 

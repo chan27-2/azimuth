@@ -6,7 +6,7 @@ import { Button, Tip } from "../ui";
 import * as G from "../../lib/glossary";
 
 type Copy = (what: string, text: string) => void;
-type Props = { value: unknown; query: string; onCopy: Copy };
+type Props = { value: unknown; query?: string; onCopy: Copy };
 
 const keyPath = (parent: string, k: string | number) =>
   typeof k === "number" ? `${parent}[${k}]` : /^[A-Za-z_$][\w$]*$/.test(k) ? `${parent}.${k}` : `${parent}["${k}"]`;
@@ -25,7 +25,7 @@ function matchPaths(v: unknown, q: string, path = "$", out = new Set<string>()):
   return hit;
 }
 
-export function JsonTree({ value, query, onCopy }: Props) {
+export function JsonTree({ value, query = "", onCopy }: Props) {
   const q = query.trim().toLowerCase();
   const hits = useMemo(() => (q ? (() => { const s = new Set<string>(); matchPaths(value, q, "$", s); return s; })() : null), [value, q]);
   return (

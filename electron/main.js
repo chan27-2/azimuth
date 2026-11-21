@@ -1,47 +1,75 @@
 import { app, BrowserWindow, ipcMain, shell, nativeTheme } from "electron";
+import path from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-app.setName("Busscope");
+const NAME = "Azimuth";
+app.setName(NAME);
 app.setAboutPanelOptions({
-  applicationName: "Busscope",
+  applicationName: NAME,
   applicationVersion: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
   version: "",
   copyright: "MIT License",
 });
-import path from "node:path";
-import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import * as azure from "./azure.js";
-import { demo } from "./demo.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Finder-launched apps don't inherit the shell PATH; AzureCliCredential needs `az`.
-process.env.PATH = ["/opt/homebrew/bin", "/usr/local/bin", process.env.PATH].join(":");
+// Finder-launched apps don't inherit the shell PATH; everything goes through `az`.
+process.env.PATH = ["/opt/homebrew/bin", "/usr/local/bin", process.env.PATH].join(path.delimiter);
 
-const az = process.env.BUSSCOPE_DEMO ? demo : azure;
+// AZIMUTH_DEMO=1 swaps every Azure call for fictional data (see electron/demo/).
+const demo = !!process.env.AZIMUTH_DEMO;
+const [core, sb, fn, ai] = await Promise.all(
+  demo
+    ? ["core", "servicebus", "functions", "insights"].map((m) => import(`./demo/${m}.js`))
+    : ["./core.js", "./servicebus.js", "./functions.js", "./insights.js"].map((m) => import(m)),
+);
+
+// Every IPC channel the window can call, as "tool.method". Nothing else is reachable from the renderer.
 const handlers = {
-  account: az.account,
-  subscriptions: az.subscriptions,
-  addAccount: az.addAccount,
-  cancelAddAccount: az.cancelAddAccount,
-  namespaces: az.namespaces,
-  entities: az.entities,
-  access: az.access,
-  setConnectionString: az.setConnectionString,
-  clearConnectionString: az.clearConnectionString,
-  peek: az.peek,
+  "core.account": core.account,
+  "core.subscriptions": core.subscriptions,
+  "core.addAccount": core.addAccount,
+  "core.cancelAddAccount": core.cancelAddAccount,
+  "sb.namespaces": sb.namespaces,
+  "sb.entities": sb.entities,
+  "sb.access": sb.access,
+  "sb.setConnectionString": sb.setConnectionString,
+  "sb.clearConnectionString": sb.clearConnectionString,
+  "sb.peek": sb.peek,
+  "fn.apps": fn.apps,
+  "fn.functions": fn.functions,
+  "fn.access": fn.access,
+  "fn.insights": fn.insights,
+  "fn.stats": fn.stats,
+  "fn.invocations": fn.invocations,
+  "fn.findInvocation": fn.findInvocation,
+  "fn.run": fn.run,
+  "fn.cancelRun": fn.cancelRun,
+  "ai.components": ai.components,
+  "ai.overview": ai.overview,
+  "ai.requests": ai.requests,
+  "ai.logs": ai.logs,
+  "ai.trace": ai.trace,
+  "ai.traceAcross": ai.traceAcross,
+  "ai.findTrace": ai.findTrace,
+  "ai.query": ai.query,
 };
-const iconPath = path.join(__dirname, "../brand/icon-1024.png");
-const icon = existsSync(iconPath) ? iconPath : undefined;
-for (const [name, fn] of Object.entries(handlers)) {
+for (const [name, handler] of Object.entries(handlers)) {
   ipcMain.handle(name, async (_e, arg) => {
     try {
-      return { ok: true, data: await fn(arg) };
+      return { ok: true, data: await handler(arg) };
     } catch (e) {
       return { ok: false, error: e?.message ?? String(e), code: e?.code, detail: e?.detail };
     }
   });
 }
-ipcMain.handle("openExternal", (_e, url) => shell.openExternal(url));
+ipcMain.handle("openExternal", (_e, url) => {
+  // Only web links, so a crafted value can't open local files or apps.
+  if (/^https:\/\//i.test(String(url))) return shell.openExternal(url);
+});
+
+const iconPath = path.join(__dirname, "../brand/icon-1024.png");
+const icon = existsSync(iconPath) ? iconPath : undefined;
 
 // Window chrome follows each platform's convention. The 52px header row is the title bar on all of them.
 // macOS: traffic lights inset on the left, centred on that row.
@@ -64,9 +92,18 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: "#0a0a0a",
     icon,
-    title: "Busscope",
+    title: NAME,
     ...chrome(),
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true },
+  });
+  // Links inside the app open in the browser, never in a new Electron window.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
+    return { action: "deny" };
+  });
+  // The window only ever shows the app itself; reloads are fine, leaving for another site isn't.
+  win.webContents.on("will-navigate", (e, url) => {
+    if (new URL(url).origin !== new URL(win.webContents.getURL()).origin) e.preventDefault();
   });
   if (process.env.VITE_DEV) win.loadURL("http://localhost:5199");
   else win.loadFile(path.join(__dirname, "../dist/index.html"));

@@ -1,11 +1,8 @@
-// Demo mode (BUSSCOPE_DEMO=1): a made-up "Acme" estate so you can try Busscope, or take screenshots,
+// Demo mode (AZIMUTH_DEMO=1): a made-up "Acme" estate so you can try Busscope, or take screenshots,
 // without an Azure subscription. Every name, id and payload here is fictional.
 import { gzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
-
-const SUB_PROD = "00000000-0000-4000-8000-000000000001";
-const SUB_DEV = "00000000-0000-4000-8000-000000000002";
-const SUB_SIDE = "00000000-0000-4000-8000-000000000003";
+import { SUB_DEV, SUB_PROD, SUB_SIDE } from "./core.js";
 const demoConnections = new Set();
 
 const ns = (name, sub, location) => ({
@@ -94,15 +91,7 @@ function message(i, kind, deadLetter) {
   return { ...base, contentType, subject, size: body.length, body: body.toString("base64") };
 }
 
-export const demo = {
-  account: async () => ({ demo: true, user: "demo@example.com", tenantId: "00000000-0000-0000-0000-000000000000", defaultSubscription: "Acme Production" }),
-  subscriptions: async () => [
-    { id: SUB_DEV, name: "Acme Development", tenantId: "00000000-0000-4000-8000-0000000000aa", user: "you@acme.example", isDefault: true },
-    { id: SUB_PROD, name: "Acme Production", tenantId: "00000000-0000-4000-8000-0000000000aa", user: "you@acme.example", isDefault: false },
-    { id: SUB_SIDE, name: "Side project", tenantId: "00000000-0000-4000-8000-0000000000bb", user: "you@example.com", isDefault: false },
-  ],
-  addAccount: async () => true,
-  cancelAddAccount: async () => true,
+const demo = {
   access: async (n) => ({
     read: true,
     receive: n.name.includes("dev"),
@@ -131,3 +120,5 @@ export const demo = {
     return { auth: demoConnections.has(n.id) ? "connection" : n.name.includes("dev") ? "entra" : "sas", messages: Array.from({ length: total }, (_, i) => message(i, i + seed, deadLetter)) };
   },
 };
+
+export const { access, setConnectionString, clearConnectionString, namespaces, entities, peek } = demo;

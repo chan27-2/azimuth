@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { api } from "../../lib/api";
 import { motion } from "motion/react";
 import { KeyRound, Lock, ShieldCheck } from "lucide-react";
-import type { Access, Namespace } from "../types";
-import * as G from "../lib/glossary";
-import { Button, CopyButton, Field, Spinner, Tip } from "./ui";
+import type { Access, Namespace } from "../../types";
+import * as G from "../../lib/glossary";
+import { Button, CopyButton, Field, Spinner, Tip } from "../../ui/ui";
 
 // Shown instead of the message list when you can read a namespace's counts but not its messages.
 export function AccessPanel({ ns, access, rejected, user, onConnected }: { ns: Namespace; access: Access; rejected?: boolean; user?: string; onConnected: () => void }) {
@@ -16,7 +17,7 @@ export function AccessPanel({ ns, access, rejected, user, onConnected }: { ns: N
     setBusy(true);
     setError(null);
     try {
-      await window.bus.setConnectionString({ ns, connectionString: cs });
+      await api.sb.setConnectionString({ ns, connectionString: cs });
       setCs("");
       onConnected();
     } catch (e) {
