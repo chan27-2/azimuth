@@ -9,7 +9,7 @@ import * as G from "../../lib/glossary";
 import { Button, Empty, Field, Select, Spinner, Switch, Tip } from "../../ui/ui";
 import { JsonTree } from "../../ui/viewers/JsonTree";
 import { LogEntry, SeverityBadge } from "./TraceView";
-import { ColumnHeader, PanelToggle, SidePanel, useColumns, usePanel, type Col } from "../../ui/resize";
+import { ColumnHeader, PanelToggle, SidePanel, sortRows, useColumns, usePanel, type Col } from "../../ui/resize";
 import { deepParse, oneLine } from "../../ui/SmartText";
 
 const LEVELS = [{ value: 0, label: "All levels" }, { value: 1, label: "Info and up" }, { value: 2, label: "Warnings and up" }, { value: 3, label: "Errors only" }];
@@ -59,10 +59,7 @@ export function LogsTab({ component, range, role, initialSearch, onOpen, operati
   const [selected, setSelected] = useState<string | null>(null);
   const key = `ailogs:${component.id}|${range}|${role ?? ""}|${level}|${applied}|${operationName ?? ""}`;
   const q = useQuery<LogRow[]>(key, () => api.ai.logs({ component, range, role, minSeverity: level, search: applied || undefined, operationName, limit: 500 }));
-  const rows = useLiveTail(live, q.data, (after) => api.ai.logs({ component, range, role, minSeverity: level, search: applied || undefined, operationName, after, limit: 500 }), key);
-  const sel = rows.find((r) => r.itemId === selected) ?? null;
-  const scroller = useRef<HTMLDivElement>(null);
-  const v = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => 34, overscan: 16 });
+  const tail = useLiveTail(live, q.data, (after) => api.ai.logs({ component, range, role, minSeverity: level, search: applied || undefined, operationName, after, limit: 500 }), key);
   const [panelOpen, togglePanel, setPanelOpen] = usePanel("logs.detail");
   const cols: Col[] = [
     { key: "time", label: "Time", width: 96 },
@@ -71,6 +68,11 @@ export function LogsTab({ component, range, role, initialSearch, onOpen, operati
     { key: "message", label: "Message", width: 0, flex: true, min: 200 },
   ];
   const columns = useColumns(compact ? "logs.compact" : "logs", cols);
+  // Exceptions sort above Critical, as the most severe.
+  const rows = useMemo(() => sortRows(tail, columns.sort, (r, k) => (k === "time" ? r.timestamp : k === "level" ? (r.itemType === "exception" ? 5 : r.severityLevel ?? 1) : k === "service" ? r.cloud_RoleName : r.message)), [tail, columns.sort]);
+  const sel = rows.find((r) => r.itemId === selected) ?? null;
+  const scroller = useRef<HTMLDivElement>(null);
+  const v = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => 34, overscan: 16 });
 
   return (
     <div className="flex h-full flex-col">
@@ -85,7 +87,7 @@ export function LogsTab({ component, range, role, initialSearch, onOpen, operati
             {live && <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-ok opacity-60" /><span className="relative inline-flex size-2 rounded-full bg-ok" /></span>}
           </span>
         </Tip>
-        <span className="ml-auto text-[12px] text-fg-3">{q.loading ? <Spinner className="size-3" /> : `${rows.length}${rows.length >= 500 ? "+" : ""} entries, newest first`}</span>
+        <span className="ml-auto text-[12px] text-fg-3">{q.loading ? <Spinner className="size-3" /> : `${rows.length}${rows.length >= 500 ? "+" : ""} entries, ${columns.sort ? "sorted" : "newest first"}`}</span>
         <PanelToggle open={panelOpen} onToggle={togglePanel} label="log details" />
       </div>
       {q.error ? (

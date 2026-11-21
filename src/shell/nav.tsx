@@ -10,10 +10,15 @@ export type Place =
   | { tool: "home" }
   | { tool: "sb"; ns?: Namespace; entity?: EntityRef }
   | { tool: "fn"; app?: FunctionApp; fn?: string }
-  | { tool: "ai"; component?: Component; trace?: TraceTarget };
+  | { tool: "ai"; component?: Component; trace?: TraceTarget; tab?: InsightsTab; op?: string; logSearch?: string };
+export type InsightsTab = "overview" | "requests" | "logs" | "query";
 
-export type Nav = { place: Place; go: (p: Place) => void; subs: Sub[]; openSearch: () => void };
-export const NavContext = createContext<Nav>({ place: { tool: "home" }, go: () => {}, subs: [], openSearch: () => {} });
+// go() pushes onto the back/forward history, like a browser. back() and forward() walk it.
+export type Nav = {
+  place: Place; go: (p: Place) => void; subs: Sub[]; openSearch: () => void;
+  back: () => void; forward: () => void; canBack: boolean; canForward: boolean;
+};
+export const NavContext = createContext<Nav>({ place: { tool: "home" }, go: () => {}, subs: [], openSearch: () => {}, back: () => {}, forward: () => {}, canBack: false, canForward: false });
 export const useNav = () => useContext(NavContext);
 
 // A short label and key for the Recent list.

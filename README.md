@@ -73,9 +73,9 @@ npm start          # builds the UI and opens the app
 
 There are no packaged builds yet; you run it from source. To try it without Azure, `npm run demo` uses a made-up "Acme" estate for all three tools. For hot reload: `npm run dev` (or `npm run dev:demo`).
 
-Panes, list columns and side panels resize by dragging their edge (double-click to reset), side panels collapse, and every breadcrumb level is clickable. Logs and message bodies are formatted when Azimuth recognises the format: JSON (even inside a sentence), XML, SQL and stack traces.
+Azimuth navigates like a browser: back and forward arrows at the top left, ⌘[ and ⌘], a two-finger swipe on the trackpad, or the mouse's back and forward buttons. Every breadcrumb level is clickable. Every table sorts by any column (click the header: ascending, descending, original order). Panes, list columns and side panels resize by dragging their edge (double-click to reset), and side panels collapse. Logs and message bodies are formatted when Azimuth recognises the format: JSON (even inside a sentence), XML, SQL and stack traces.
 
-Shortcuts: ⌘K (Ctrl+K) jumps to anything, ⌘1 / ⌘2 / ⌘3 switch tools, ⌘0 goes home, ⌘B toggles the sidebar, ⌘[ goes up a level.
+Shortcuts: ⌘K (Ctrl+K) jumps to anything, ⌘1 / ⌘2 / ⌘3 switch tools, ⌘0 goes home, ⌘B toggles the sidebar, ⌘[ / ⌘] go back and forward, ⌘↑ goes up a level.
 
 ## Sign-in and permissions
 

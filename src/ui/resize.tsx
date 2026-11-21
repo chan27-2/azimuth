@@ -2,7 +2,7 @@
 // Double-click any handle to go back to the default size.
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { PanelRight } from "lucide-react";
+import { ArrowDown, ArrowUp, PanelRight } from "lucide-react";
 import { stored, store } from "../lib/storage";
 import { cn } from "../lib/util";
 import { Button, Tip } from "./ui";
@@ -104,9 +104,65 @@ export function SidePanel({ id, open, initial = 380, min = 280, max = 760, child
 
 // ─── Columns ──────────────────────────────────────────────────────────────────
 // Each column has a stored width; one column can be `flex` and takes the remaining space.
-export type Col = { key: string; label: ReactNode; width: number; min?: number; flex?: boolean; align?: "right"; title?: string };
+export type Col = { key: string; label: ReactNode; width: number; min?: number; flex?: boolean; align?: "right"; title?: string; sortable?: boolean };
+
+// ─── Sorting ──────────────────────────────────────────────────────────────────
+export type Sort = { key: string; dir: "asc" | "desc" } | null;
+
+// Numbers (and numeric strings like "200" or "14.2"), then dates/ISO strings, then text with natural
+// ordering ("item2" before "item10"). Empty values always go last.
+export function compareValues(a: unknown, b: unknown): number {
+  const empty = (v: unknown) => v == null || v === "" || (typeof v === "number" && Number.isNaN(v));
+  if (empty(a) || empty(b)) return empty(a) && empty(b) ? 0 : empty(a) ? 1 : -1;
+  const na = typeof a === "number" ? a : typeof a === "string" && /^-?\d+(\.\d+)?$/.test(a.trim()) ? Number(a) : NaN;
+  const nb = typeof b === "number" ? b : typeof b === "string" && /^-?\d+(\.\d+)?$/.test(b.trim()) ? Number(b) : NaN;
+  if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+  if (typeof a === "boolean" && typeof b === "boolean") return Number(a) - Number(b);
+  const sa = typeof a === "object" ? JSON.stringify(a) : String(a);
+  const sb = typeof b === "object" ? JSON.stringify(b) : String(b);
+  return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: "base" });
+}
+
+export function sortRows<T>(rows: T[], sort: Sort, get: (row: T, key: string) => unknown): T[] {
+  if (!sort) return rows;
+  const dir = sort.dir === "asc" ? 1 : -1;
+  // Stable: ties keep the original (server) order. Empty values stay last in both directions.
+  return rows
+    .map((row, i) => ({ row, i, v: get(row, sort.key) }))
+    .sort((x, y) => {
+      const ex = x.v == null || x.v === "", ey = y.v == null || y.v === "";
+      if (ex !== ey) return ex ? 1 : -1;
+      return compareValues(x.v, y.v) * dir || x.i - y.i;
+    })
+    .map((x) => x.row);
+}
+
+export function useSort(id: string): [Sort, (key: string) => void] {
+  const [sort, setSort] = useState<Sort>(() => stored(`sort.${id}`, null));
+  // Click cycles: ascending → descending → back to the original order.
+  const toggle = (key: string) => setSort((cur) => {
+    const next: Sort = cur?.key !== key ? { key, dir: "asc" } : cur.dir === "asc" ? { key, dir: "desc" } : null;
+    store(`sort.${id}`, next);
+    return next;
+  });
+  return [sort, toggle];
+}
+
+export function SortLabel({ label, active, dir, align, onClick }: { label: ReactNode; active: boolean; dir?: "asc" | "desc"; align?: "right"; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title={active ? (dir === "asc" ? "Sorted ascending. Click for descending." : "Sorted descending. Click to reset.") : "Click to sort"}
+      className={cn("inline-flex max-w-full items-center gap-1 rounded-sm transition-colors duration-150 hover:text-fg", active && "text-fg", align === "right" && "flex-row-reverse")}
+    >
+      <span className="truncate">{label}</span>
+      {active ? (dir === "asc" ? <ArrowUp className="size-3 shrink-0" /> : <ArrowDown className="size-3 shrink-0" />) : null}
+    </button>
+  );
+}
 
 export function useColumns(id: string, cols: Col[]) {
+  const [sort, toggleSort] = useSort(id);
   const [widths, setWidths] = useState<Record<string, number>>(() => stored(`cols.${id}`, {}));
   const width = (c: Col) => widths[c.key] ?? (c.flex ? c.min ?? 160 : c.width);
   const setWidth = (key: string, n: number) => setWidths((prev) => { const next = { ...prev, [key]: n }; store(`cols.${id}`, next); return next; });
@@ -118,7 +174,7 @@ export function useColumns(id: string, cols: Col[]) {
   const handle = (c: Col) => (
     <ResizeHandle size={width(c)} onSize={(n) => setWidth(c.key, n)} onReset={() => reset(c.key)} min={c.flex ? 80 : c.min ?? 48} max={1600} label={`Resize ${typeof c.label === "string" ? c.label : c.key} column`} />
   );
-  return { template, total, width, handle };
+  return { template, total, width, handle, sort, toggleSort };
 }
 
 // A <th> with a stored width and a drag handle, for real tables (table-layout: fixed, plus a trailing
@@ -126,7 +182,9 @@ export function useColumns(id: string, cols: Col[]) {
 export function Th({ col, columns, className, children }: { col: Col; columns: ReturnType<typeof useColumns>; className?: string; children?: ReactNode }) {
   return (
     <th className={cn("relative truncate font-normal", col.align === "right" ? "text-right" : "text-left", className)} style={{ width: columns.width(col) }} title={col.title}>
-      {children ?? col.label}
+      {col.sortable === false ? children ?? col.label : (
+        <SortLabel label={children ?? col.label} active={columns.sort?.key === col.key} dir={columns.sort?.dir} align={col.align} onClick={() => columns.toggleSort(col.key)} />
+      )}
       {columns.handle(col)}
     </th>
   );
@@ -138,7 +196,7 @@ export function ColumnHeader({ cols, columns, className }: { cols: Col[]; column
     <div className={cn("sticky top-0 z-10 grid shrink-0 border-b border-line bg-bg text-[11px] text-fg-3", className)} style={{ gridTemplateColumns: columns.template }}>
       {cols.map((c) => (
         <div key={c.key} title={c.title} className={cn("relative truncate py-1.5 pr-3", c.align === "right" && "text-right")}>
-          {c.label}
+          {c.sortable === false ? c.label : <SortLabel label={c.label} active={columns.sort?.key === c.key} dir={columns.sort?.dir} align={c.align} onClick={() => columns.toggleSort(c.key)} />}
           {columns.handle(c)}
         </div>
       ))}

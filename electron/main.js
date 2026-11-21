@@ -94,7 +94,7 @@ function createWindow() {
     icon,
     title: NAME,
     ...chrome(),
-    webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true },
+    webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, additionalArguments: demo ? ["--azimuth-demo"] : [] },
   });
   // Links inside the app open in the browser, never in a new Electron window.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -104,6 +104,12 @@ function createWindow() {
   // The window only ever shows the app itself; reloads are fine, leaving for another site isn't.
   win.webContents.on("will-navigate", (e, url) => {
     if (new URL(url).origin !== new URL(win.webContents.getURL()).origin) e.preventDefault();
+  });
+  // Back/forward that arrive outside the page: macOS swipe (three-finger setting), Windows browser keys and mouse buttons.
+  win.on("swipe", (_e, dir) => (dir === "left" || dir === "right") && win.webContents.send("nav", dir === "right" ? "back" : "forward"));
+  win.on("app-command", (_e, cmd) => {
+    if (cmd === "browser-backward") win.webContents.send("nav", "back");
+    if (cmd === "browser-forward") win.webContents.send("nav", "forward");
   });
   if (process.env.VITE_DEV) win.loadURL("http://localhost:5199");
   else win.loadFile(path.join(__dirname, "../dist/index.html"));

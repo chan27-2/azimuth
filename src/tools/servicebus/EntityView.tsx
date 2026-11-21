@@ -10,7 +10,10 @@ import { b64ToBytes, detect, type Detection } from "./detect";
 import { ago, cn, envOf, fmtTime } from "../../lib/util";
 import { AnimatedNumber, Breadcrumbs, Button, Chip, Empty, EnvBadge, Field, Header, NoDrag, Select, Spinner, Tabs, Tip } from "../../ui/ui";
 import { useNav } from "../../shell/nav";
-import { ResizablePane } from "../../ui/resize";
+import { ResizablePane, sortRows } from "../../ui/resize";
+import { store, stored } from "../../lib/storage";
+
+type MsgOrder = "queue" | "newest" | "largest" | "deliveries";
 import * as G from "../../lib/glossary";
 import { mod, modClick } from "../../lib/platform";
 import { MessageDetail } from "./MessageDetail";
@@ -61,9 +64,10 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [items]);
 
+  const [order, setOrder] = useState<MsgOrder>(() => stored("sb.order", "queue"));
   const filtered = useMemo(() => {
     const f = filter.trim().toLowerCase();
-    return items.filter((it) => {
+    const kept = items.filter((it) => {
       if (reason && it.msg.deadLetterReason !== reason) return false;
       if (range && it.msg.enqueuedTime) {
         const t = new Date(it.msg.enqueuedTime).getTime();
@@ -79,7 +83,11 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
         JSON.stringify(it.msg.applicationProperties).toLowerCase().includes(f)
       );
     });
-  }, [items, filter, reason, range]);
+    if (order === "queue") return kept;
+    if (order === "newest") return [...kept].reverse();
+    if (order === "largest") return sortRows(kept, { key: "s", dir: "desc" }, (it) => it.msg.size);
+    return sortRows(kept, { key: "d", dir: "desc" }, (it) => it.msg.deliveryCount);
+  }, [items, filter, reason, range, order]);
 
   const sel = filtered.find((i) => i.msg.sequenceNumber === selected) ?? filtered[0] ?? null;
   const cmp = compare ? items.find((i) => i.msg.sequenceNumber === compare) ?? null : null;
@@ -93,7 +101,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
       <Header>
         <Breadcrumbs items={[
           { label: "Service Bus", onClick: () => go({ tool: "sb", ns: undefined }), tip: { title: "Service Bus", body: "All namespaces." } },
-          { label: entity.ns.name, icon: <Network />, onClick: onBack, tip: { title: `Back to ${entity.ns.name}`, body: `Topology and totals for the whole namespace. Shortcut: ${mod("[")}` } },
+          { label: entity.ns.name, icon: <Network />, onClick: onBack, tip: { title: `Back to ${entity.ns.name}`, body: `Topology and totals for the whole namespace. Shortcut: ${mod("↑")}` } },
           ...(entity.kind === "subscription" ? [{ label: entity.topic, icon: <Layers />, onClick: onBack, tip: { title: `Topic · ${entity.topic}`, body: "Opens the namespace, where this topic and all its subscriptions are drawn." } }] : []),
           { label: title, icon: <Icon /> },
         ]} />
@@ -160,7 +168,13 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
             )}
           </div>
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-line px-3 text-[12px] text-fg-3">
-            <span className="tabular">{q.data ? `${filtered.length} of ${items.length} peeked` : "—"}</span>
+            <span className="flex items-center gap-2">
+              <span className="tabular">{q.data ? `${filtered.length} of ${items.length} peeked` : "—"}</span>
+              {items.length > 1 && (
+                <Select<MsgOrder> value={order} onChange={(o) => { setOrder(o); store("sb.order", o); }} label="Sort messages" align="start"
+                  options={[{ value: "queue", label: "Queue order" }, { value: "newest", label: "Newest first" }, { value: "largest", label: "Largest first" }, { value: "deliveries", label: "Most deliveries" }]} />
+              )}
+            </span>
             {compare && (
               <Button variant="ghost" size="sm" onClick={() => setCompare(null)} className="-mr-1.5 text-accent hover:text-accent">
                 <GitCompare /> Comparing #{compare} <X />

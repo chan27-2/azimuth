@@ -15,7 +15,10 @@ import { TraceView } from "../insights/TraceView";
 import { LogsTab } from "../insights/LogsTab";
 import { triggerIcon, triggerSummary, useFnLink } from "./common";
 import { RunPanel } from "./RunPanel";
-import { ResizablePane, Th, useColumns, type Col } from "../../ui/resize";
+import { ResizablePane, Th, sortRows, useColumns, type Col } from "../../ui/resize";
+import { store, stored } from "../../lib/storage";
+
+type InvOrder = "newest" | "oldest" | "slowest" | "failed";
 
 const FN_COLS: Col[] = [
   { key: "name", label: "Function", width: 300 },
@@ -146,7 +149,10 @@ function AppPage(p: Common & { fnsError?: string; fnsLoading: boolean; onChooseL
                 </tr>
               </thead>
               <tbody>
-                {fns?.map((f) => {
+                {sortRows(fns ?? [], columns.sort, (f, k) => {
+                  const st = byName.get(f.name.toLowerCase());
+                  return k === "name" ? f.name : k === "trigger" ? triggerSummary(f) : k === "runs" ? st?.n : k === "failed" ? (st?.n ? st.failed / st.n : undefined) : k === "p95" ? st?.p95 : st?.lastRun;
+                }).map((f) => {
                   const s = byName.get(f.name.toLowerCase());
                   return (
                     <tr key={f.name} onClick={() => go({ tool: "fn", app, fn: f.name })} className={cn("cursor-default border-b border-line/60 last:border-0 hover:bg-bg-2", f.disabled && "opacity-60")}>
@@ -189,7 +195,14 @@ function FunctionPage(p: Common & { f: Fn }) {
   const [fresh, setFresh] = useState<Invocation | null>(null);
   const invKey = link ? `fninv:${app.id}|${f.name}|${link.component.id}|${link.role ?? ""}|${range}|${failedOnly}` : null;
   const inv = useQuery<Invocation[]>(invKey, () => api.fn.invocations({ link: link!, fn: f.name, range, failedOnly }));
-  const list = useMemo(() => (fresh && !inv.data?.some((i) => i.operation_Id === fresh.operation_Id) ? [fresh, ...(inv.data ?? [])] : inv.data ?? []), [inv.data, fresh]);
+  const [order, setOrder] = useState<InvOrder>(() => stored("fn.invorder", "newest"));
+  const list = useMemo(() => {
+    const all = fresh && !inv.data?.some((i) => i.operation_Id === fresh.operation_Id) ? [fresh, ...(inv.data ?? [])] : inv.data ?? [];
+    if (order === "newest") return all;
+    if (order === "oldest") return [...all].reverse();
+    if (order === "slowest") return sortRows(all, { key: "d", dir: "desc" }, (x) => x.duration);
+    return sortRows(all, { key: "f", dir: "desc" }, (x) => (x.success.toLowerCase() === "false" ? 1 : 0));
+  }, [inv.data, fresh, order]);
   useEffect(() => { if (!selected && list.length) setSelected(list[0]); }, [list, selected]);
   const trace = useTrace(link?.component, selected?.operation_Id, selected?.timestamp, subs.map((s) => s.id));
   const stats = useQuery<FnStats[]>(link ? `fnstats:${app.id}|${link.component.id}|${link.role ?? ""}|${range}|${f.name}` : null, () => api.fn.stats({ link: link!, functionNames: [f.name], range }));
@@ -237,7 +250,10 @@ function FunctionPage(p: Common & { f: Fn }) {
             <ResizablePane id="fn.invocations" initial={320} min={220} max={640} className="flex flex-col border-r border-line">
               <div className="flex h-10 shrink-0 items-center justify-between border-b border-line px-4 text-[12px] text-fg-3">
                 <Tip content={G.fn.invocation}><span>{inv.loading ? "Loading…" : `${list.length}${list.length >= 300 ? "+" : ""} invocations`}</span></Tip>
-                <Switch checked={failedOnly} onChange={(x) => { setFailedOnly(x); setSelected(null); }} label="Failed only" />
+                <span className="flex items-center gap-1">
+                  <Select<InvOrder> value={order} onChange={(o) => { setOrder(o); store("fn.invorder", o); }} label="Sort invocations" options={[{ value: "newest", label: "Newest" }, { value: "oldest", label: "Oldest" }, { value: "slowest", label: "Slowest" }, { value: "failed", label: "Failed first" }]} />
+                  <Switch checked={failedOnly} onChange={(x) => { setFailedOnly(x); setSelected(null); }} label="Failed" />
+                </span>
               </div>
               {inv.error ? (
                 <div className="p-4 text-[12.5px] text-bad">{inv.error}</div>

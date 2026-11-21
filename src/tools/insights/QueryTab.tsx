@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, ArrowUpRight, Braces, FileSpreadsheet, Play, Table2 } from "lucide-react";
 import type { Component, QueryResult, Range } from "../../types";
@@ -9,7 +9,7 @@ import { mod } from "../../lib/platform";
 import * as G from "../../lib/glossary";
 import { Button, Empty, Kbd, Select, Spinner, Tip } from "../../ui/ui";
 import { RANGES } from "./common";
-import { PanelToggle, ResizeHandle, SidePanel, usePanel } from "../../ui/resize";
+import { PanelToggle, ResizeHandle, SidePanel, SortLabel, sortRows, usePanel, useSort } from "../../ui/resize";
 import { SmartText, deepParse, oneLine } from "../../ui/SmartText";
 import { JsonTree } from "../../ui/viewers/JsonTree";
 import { stored as load } from "../../lib/storage";
@@ -26,6 +26,7 @@ const csvCell = (v: unknown) => {
   const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
+const rowsCount = (r: QueryResult | null) => r?.rows.length ?? 0;
 const show = (v: unknown) => (v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v));
 
 export function QueryTab({ component, range: defaultRange, onOpenTrace }: { component: Component; range: Range; onOpenTrace: (operationId: string, at?: string) => void }) {
@@ -36,11 +37,12 @@ export function QueryTab({ component, range: defaultRange, onOpenTrace }: { comp
   const [error, setError] = useState<{ message: string; detail?: string } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [row, setRow] = useState<number | null>(null);
+  const [sort, toggleSort] = useSort("query");
   const [panelOpen, togglePanel, setPanelOpen] = usePanel("query.row");
   const [colW, setColW] = useState<Record<string, number>>(() => load("cols.query", {}));
   const widthOf = (name: string) => colW[name] ?? 180;
   const setWidth = (name: string, n: number) => setColW((p) => { const next = { ...p, [name]: n }; store("cols.query", next); return next; });
-  const v = useVirtualizer({ count: result?.rows.length ?? 0, getScrollElement: () => scroller.current, estimateSize: () => 30, overscan: 20 });
+  const v = useVirtualizer({ count: rowsCount(result), getScrollElement: () => scroller.current, estimateSize: () => 30, overscan: 20 });
 
   const run = async () => {
     if (busy) return;
@@ -63,7 +65,13 @@ export function QueryTab({ component, range: defaultRange, onOpenTrace }: { comp
   const tsCol = result?.columns.findIndex((c) => c.name === "timestamp") ?? -1;
   const template = (result?.columns ?? []).map((c) => `${widthOf(c.name)}px`).join(" ");
   const tableWidth = (result?.columns ?? []).reduce((n, c) => n + widthOf(c.name), 0);
-  const sel = row != null ? result?.rows[row] : undefined;
+  // Sorting reorders the rows the query returned; it doesn't run the query again.
+  const rows = useMemo(() => {
+    if (!result) return [];
+    const i = result.columns.findIndex((c) => c.name === sort?.key);
+    return i < 0 ? result.rows : sortRows(result.rows, sort, (r) => r[i]);
+  }, [result, sort]);
+  const sel = row != null ? rows[row] : undefined;
 
   return (
     <div className="flex h-full flex-col">
@@ -100,8 +108,8 @@ export function QueryTab({ component, range: defaultRange, onOpenTrace }: { comp
             <span>{result.rows.length.toLocaleString()} row{result.rows.length === 1 ? "" : "s"}{result.truncated ? " (first 10,000)" : ""} · {fmtMs(result.ms)}</span>
             <span>Click a row to see it in full{opCol >= 0 ? " and open its trace" : ""}. Drag a column edge to resize it.</span>
             <span className="ml-auto flex gap-1">
-              <Tip content="Copy results as CSV"><Button variant="ghost" size="sm" onClick={() => copy([result.columns.map((c) => csvCell(c.name)).join(","), ...result.rows.map((r) => r.map(csvCell).join(","))].join("\n"))}><FileSpreadsheet /> CSV</Button></Tip>
-              <Tip content="Copy results as JSON"><Button variant="ghost" size="sm" onClick={() => copy(JSON.stringify(result.rows.map((r) => Object.fromEntries(result.columns.map((c, i) => [c.name, r[i]]))), null, 2))}><Braces /> JSON</Button></Tip>
+              <Tip content="Copy results as CSV"><Button variant="ghost" size="sm" onClick={() => copy([result.columns.map((c) => csvCell(c.name)).join(","), ...rows.map((r) => r.map(csvCell).join(","))].join("\n"))}><FileSpreadsheet /> CSV</Button></Tip>
+              <Tip content="Copy results as JSON"><Button variant="ghost" size="sm" onClick={() => copy(JSON.stringify(rows.map((r) => Object.fromEntries(result.columns.map((c, i) => [c.name, r[i]]))), null, 2))}><Braces /> JSON</Button></Tip>
               <PanelToggle open={panelOpen} onToggle={togglePanel} label="row details" />
             </span>
           </div>
@@ -111,14 +119,14 @@ export function QueryTab({ component, range: defaultRange, onOpenTrace }: { comp
               <div className="sticky top-0 z-10 grid border-b border-line bg-bg text-[11px] text-fg-3" style={{ gridTemplateColumns: template }}>
                 {result.columns.map((c) => (
                   <div key={c.name} className="relative truncate px-3 py-1.5" title={`${c.name} (${c.type})`}>
-                    {c.name}
+                    <SortLabel label={c.name} active={sort?.key === c.name} dir={sort?.dir} onClick={() => { toggleSort(c.name); setRow(null); }} />
                     <ResizeHandle size={widthOf(c.name)} onSize={(n) => setWidth(c.name, n)} onReset={() => setWidth(c.name, 180)} min={60} max={1600} label={`Resize ${c.name} column`} />
                   </div>
                 ))}
               </div>
               <div style={{ height: v.getTotalSize(), position: "relative" }}>
                 {v.getVirtualItems().map((it) => {
-                  const r = result.rows[it.index];
+                  const r = rows[it.index];
                   return (
                     <div
                       key={it.index}

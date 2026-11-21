@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Terminal } from "lucide-react";
 import type { Account, Sub } from "../types";
 import { api } from "../lib/api";
 import { useQuery } from "../lib/query";
 import { store, stored } from "../lib/storage";
-import { Empty, SidebarState, Spinner } from "../ui/ui";
+import { Empty, HistoryState, SidebarState, Spinner } from "../ui/ui";
 import { Sidebar } from "./Sidebar";
 import { CommandMenu } from "./CommandMenu";
 import { Home, HomeNav } from "./Home";
 import { NavContext, describe, type Nav, type Place, type ToolId } from "./nav";
 import { TOOLS } from "./tools";
+import { SwipeIndicator, useSwipeNav } from "./swipe";
 import { ServiceBusNav } from "../tools/servicebus/Nav";
 import { ServiceBusView } from "../tools/servicebus/View";
 import { FunctionsNav } from "../tools/functions/Nav";
@@ -21,21 +22,46 @@ import { InsightsView } from "../tools/insights/View";
 
 type Places = { sb: Place; fn: Place; ai: Place };
 const EMPTY: Places = { sb: { tool: "sb" }, fn: { tool: "fn" }, ai: { tool: "ai" } };
+const isTyping = (e: KeyboardEvent) => e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
+
 export type Recent = { key: string; label: string; hint: string; place: Place; at: number };
 
-// One level up within a tool, for ⌘[ and breadcrumbs.
+// One level up within a tool, for ⌘↑.
 function up(p: Place): Place {
-  if (p.tool === "sb") return p.entity ? { tool: "sb", ns: p.ns } : p;
-  if (p.tool === "fn") return p.fn ? { tool: "fn", app: p.app } : p;
-  if (p.tool === "ai") return p.trace && p.component ? { tool: "ai", component: p.component } : p;
+  if (p.tool === "sb") return p.entity ? { tool: "sb", ns: p.ns } : p.ns ? { tool: "sb", ns: undefined } : p;
+  if (p.tool === "fn") return p.fn ? { tool: "fn", app: p.app } : p.app ? { tool: "fn", app: undefined } : p;
+  if (p.tool === "ai") return p.trace && p.component ? { ...p, trace: undefined } : p.component || p.trace ? { tool: "ai", component: undefined } : p;
   return p;
+}
+
+// Where you are, every tool's last place, and a browser-style history. History lasts for the session.
+type NavState = { tool: ToolId | "home"; places: Places; hist: Place[]; idx: number };
+type NavAction = { type: "go"; place: Place } | { type: "back" } | { type: "forward" };
+const same = (a: Place | undefined, b: Place | undefined) => JSON.stringify(a) === JSON.stringify(b);
+
+function show(s: NavState, p: Place): NavState {
+  return { ...s, tool: p.tool, places: p.tool === "home" ? s.places : { ...s.places, [p.tool]: p } };
+}
+function navReducer(s: NavState, a: NavAction): NavState {
+  if (a.type === "back") return s.idx > 0 ? { ...show(s, s.hist[s.idx - 1]), idx: s.idx - 1 } : s;
+  if (a.type === "forward") return s.idx < s.hist.length - 1 ? { ...show(s, s.hist[s.idx + 1]), idx: s.idx + 1 } : s;
+  // go({ tool }) alone switches tools and returns to where that tool was.
+  const target: Place = Object.keys(a.place).length > 1 || a.place.tool === "home" ? a.place : s.places[a.place.tool];
+  if (same(target, s.hist[s.idx])) return show(s, target);
+  const hist = [...s.hist.slice(0, s.idx + 1), target].slice(-200);
+  return { ...show(s, target), hist, idx: hist.length - 1 };
 }
 
 export function App() {
   const account = useQuery<Account>("account", () => api.core.account());
   const subs = useQuery<Sub[]>("subs", () => api.core.subscriptions());
-  const [tool, setTool] = useState<ToolId | "home">(() => stored("tool", "home"));
-  const [places, setPlaces] = useState<Places>(() => ({ ...EMPTY, ...stored("places", {}) }));
+  const [nav_, dispatch] = useReducer(navReducer, undefined, (): NavState => {
+    const tool = stored<ToolId | "home">("tool", "home");
+    const places: Places = { ...EMPTY, ...stored("places", {}) };
+    return { tool, places, hist: [tool === "home" ? { tool: "home" } : places[tool]], idx: 0 };
+  });
+  const { tool, places } = nav_;
+  useEffect(() => { store("tool", tool); store("places", places); }, [tool, places]);
   const [recent, setRecent] = useState<Recent[]>(() => stored("recent", []));
   const [cmd, setCmd] = useState(false);
   const [width, setWidth] = useState(() => stored("sidebar.width", 340));
@@ -48,14 +74,10 @@ export function App() {
   const resize = (w: number) => { setWidth(w); store("sidebar.width", w); };
   const toggle = useCallback(() => setCollapsed((c) => { store("sidebar.collapsed", !c); return !c; }), []);
 
+  const back = useCallback(() => dispatch({ type: "back" }), []);
+  const forward = useCallback(() => dispatch({ type: "forward" }), []);
   const go = useCallback((p: Place) => {
-    setTool(p.tool);
-    store("tool", p.tool);
-    if (p.tool === "home") return;
-    // go({ tool }) alone just switches tools and keeps that tool's place.
-    if (Object.keys(p).length > 1) {
-      setPlaces((prev) => { const next = { ...prev, [p.tool]: p }; store("places", next); return next; });
-    }
+    dispatch({ type: "go", place: p });
     const d = describe(p);
     if (d) setRecent((prev) => { const next = [{ ...d, place: p, at: Date.now() }, ...prev.filter((r) => r.key !== d.key)].slice(0, 12); store("recent", next); return next; });
   }, []);
@@ -68,7 +90,9 @@ export function App() {
       const k = e.key.toLowerCase();
       if (k === "k") { e.preventDefault(); setCmd((o) => !o); }
       else if (k === "b") { e.preventDefault(); toggle(); }
-      else if (k === "[") { e.preventDefault(); if (place.tool !== "home") go(up(place)); }
+      else if (k === "[") { e.preventDefault(); back(); }
+      else if (k === "]") { e.preventDefault(); forward(); }
+      else if (e.key === "ArrowUp" && !isTyping(e)) { e.preventDefault(); if (place.tool !== "home") go(up(place)); }
       else if (k === "0") { e.preventDefault(); go({ tool: "home" }); }
       else {
         const t = TOOLS.find((x) => x.key === k);
@@ -77,9 +101,12 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggle, go, place]);
+  }, [toggle, go, place, back, forward]);
 
-  const nav: Nav = useMemo(() => ({ place, go, subs: visibleSubs, openSearch: () => setCmd(true) }), [place, go, visibleSubs]);
+  const canBack = nav_.idx > 0;
+  const canForward = nav_.idx < nav_.hist.length - 1;
+  const nav: Nav = useMemo(() => ({ place, go, subs: visibleSubs, openSearch: () => setCmd(true), back, forward, canBack, canForward }), [place, go, visibleSubs, back, forward, canBack, canForward]);
+  useSwipeNav({ back, forward, canBack, canForward });
 
   if (subs.error || account.error)
     return (
@@ -91,11 +118,13 @@ export function App() {
       </div>
     );
 
-  const viewKey = JSON.stringify(describe(place)?.key ?? place.tool) + (place.tool === "ai" && place.trace ? place.trace.operationId : "");
+  // The view re-mounts per resource; tabs and an open trace are part of the place but keep the view mounted.
+  const viewKey = JSON.stringify(describe(place)?.key ?? place.tool) + (place.tool === "ai" && place.trace && !place.component ? place.trace.operationId : "");
 
   return (
     <NavContext.Provider value={nav}>
       <SidebarState.Provider value={{ collapsed, toggle }}>
+      <HistoryState.Provider value={{ back, forward, canBack, canForward }}>
         <div className="flex h-full">
           {subs.data ? (
             <Sidebar width={width} collapsed={collapsed} onResize={resize} account={account.data} allSubs={subs.data} hidden={hidden} onHiddenChange={setHidden}>
@@ -122,7 +151,9 @@ export function App() {
             </AnimatePresence>
           </main>
           {subs.data && <CommandMenu open={cmd} onClose={() => setCmd(false)} />}
+          <SwipeIndicator />
         </div>
+      </HistoryState.Provider>
       </SidebarState.Provider>
     </NavContext.Provider>
   );

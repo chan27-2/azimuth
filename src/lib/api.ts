@@ -3,7 +3,7 @@
 import type { Api } from "../types";
 
 type Result = { ok: true; data: unknown } | { ok: false; error: string; code?: string; detail?: unknown };
-type Ipc = { invoke(name: string, arg?: unknown): Promise<Result>; openExternal(url: string): Promise<void>; platform: string };
+type Ipc = { invoke(name: string, arg?: unknown): Promise<Result>; openExternal(url: string): Promise<void>; platform: string; onNav(cb: (cmd: "back" | "forward") => void): () => void };
 
 const ipc = (window as unknown as { azimuthIpc: Ipc }).azimuthIpc;
 
@@ -25,3 +25,7 @@ export const api = Object.fromEntries(
 ) as unknown as Api;
 
 export const openExternal = (url: string) => ipc.openExternal(url);
+
+// Back/forward from outside the page: the macOS swipe gesture (when set to three fingers), Windows
+// browser keys and some mice. Returns an unsubscribe function.
+export const onNavCommand = (cb: (cmd: "back" | "forward") => void) => ipc.onNav?.(cb) ?? (() => {});

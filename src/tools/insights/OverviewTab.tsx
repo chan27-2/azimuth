@@ -6,12 +6,12 @@ import { useQuery } from "../../lib/query";
 import { ago, cn, compact, fmtMs, pct } from "../../lib/util";
 import * as G from "../../lib/glossary";
 import { AnimatedNumber, Empty, Spinner, Tip, type TipContent } from "../../ui/ui";
-import { Th, useColumns, type Col } from "../../ui/resize";
+import { Th, sortRows, useColumns, type Col } from "../../ui/resize";
 
 const OP_COLS: Col[] = [
   { key: "name", label: "Name", width: 340 },
   { key: "n", label: "Count", width: 84, align: "right" },
-  { key: "failed", label: "Failed", width: 84, align: "right" },
+  { key: "failed", label: "Failed", width: 84, align: "right", title: "Failure rate" },
   { key: "p50", label: "p50", width: 84, align: "right" },
   { key: "p95", label: "p95", width: 90, align: "right" },
 ];
@@ -57,7 +57,7 @@ export function OverviewTab({ component, range, role, onOperation, onException }
                 </tr>
               </thead>
               <tbody>
-                {o.operations.map((op) => (
+                {sortRows(o.operations, columns.sort, (op, k) => (k === "failed" ? (op.n ? op.failed / op.n : 0) : (op as Record<string, unknown>)[k])).map((op) => (
                   <tr key={op.name + op.role} onClick={() => onOperation(op.name)} className="cursor-default border-b border-line/60 last:border-0 hover:bg-bg-2">
                     <td className="truncate py-2 pl-4 pr-2 text-fg" title={`${op.name} · ${op.role}`}>{op.name}<span className="ml-2 text-[11.5px] text-fg-3">{op.role}</span></td>
                     <td className="px-2 py-2 text-right tabular text-fg-2">{compact(op.n)}</td>

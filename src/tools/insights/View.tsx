@@ -8,7 +8,7 @@ import { envOf, fmtTime } from "../../lib/util";
 import * as G from "../../lib/glossary";
 import { Breadcrumbs, Button, Empty, EnvBadge, Header, NoDrag, Select, Spinner, Tabs, Tip } from "../../ui/ui";
 import { InsightsGlyph } from "../../ui/Logo";
-import { useNav, type Place, type TraceTarget } from "../../shell/nav";
+import { useNav, type InsightsTab, type Place, type TraceTarget } from "../../shell/nav";
 import { RangeSelect, useRange, useTrace } from "./common";
 import { TraceView } from "./TraceView";
 import { OverviewTab } from "./OverviewTab";
@@ -17,7 +17,7 @@ import { LogsTab } from "./LogsTab";
 import { QueryTab } from "./QueryTab";
 
 export function InsightsView({ place }: { place: Extract<Place, { tool: "ai" }> }) {
-  if (place.component) return <ComponentView key={place.component.id} component={place.component} initialTrace={place.trace} />;
+  if (place.component) return <ComponentView key={place.component.id} place={place as Extract<Place, { tool: "ai" }> & { component: Component }} />;
   if (place.trace) return <TraceFinder target={place.trace} />;
   return (
     <div className="flex h-full flex-col">
@@ -29,16 +29,19 @@ export function InsightsView({ place }: { place: Extract<Place, { tool: "ai" }> 
   );
 }
 
-type Tab = "overview" | "requests" | "logs" | "query";
-
-function ComponentView({ component, initialTrace }: { component: Component; initialTrace?: TraceTarget }) {
+// The tab, an operation or exception filter and an open trace all live in the place, so back and
+// forward step through them like pages.
+function ComponentView({ place }: { place: Extract<Place, { tool: "ai" }> & { component: Component } }) {
   const { go } = useNav();
-  const [tab, setTab] = useState<Tab>("overview");
+  const component = place.component;
+  const tab: InsightsTab = place.tab ?? "overview";
+  const trace = place.trace ?? null;
+  const opFilter = place.op;
+  const logSearch = place.logSearch;
+  const setTab = (t: InsightsTab) => go({ tool: "ai", component, tab: t, op: t === "requests" ? opFilter : undefined, logSearch: t === "logs" ? logSearch : undefined });
+  const setTrace = (t: TraceTarget | null) => go({ ...place, trace: t ?? undefined });
   const [range, setRange] = useRange();
   const [role, setRole] = useState<string | null>(null);
-  const [trace, setTrace] = useState<TraceTarget | null>(initialTrace ?? null);
-  const [opFilter, setOpFilter] = useState<string | undefined>();
-  const [logSearch, setLogSearch] = useState<string | undefined>();
   const env = envOf(component.name);
   // Roles come from the unfiltered overview, so the list doesn't shrink to the selected role.
   const roles = useQuery<Overview>(`aiov:${component.id}|${range}|`, () => api.ai.overview({ component, range, role: null }));
@@ -75,11 +78,11 @@ function ComponentView({ component, initialTrace }: { component: Component; init
       <div className="min-h-0 flex-1">
         {tab === "overview" && (
           <OverviewTab component={component} range={range} role={role}
-            onOperation={(name) => { setOpFilter(name); setTab("requests"); }}
-            onException={(type) => { setLogSearch(type); setTab("logs"); }} />
+            onOperation={(name) => go({ tool: "ai", component, tab: "requests", op: name })}
+            onException={(type) => go({ tool: "ai", component, tab: "logs", logSearch: type })} />
         )}
-        {tab === "requests" && <RequestsTab component={component} range={range} role={role} name={opFilter} onClearName={() => setOpFilter(undefined)} onOpen={(r) => setTrace({ operationId: r.operation_Id, at: r.timestamp })} />}
-        {tab === "logs" && <LogsTab component={component} range={range} role={role} initialSearch={logSearch} onOpen={(l) => setTrace({ operationId: l.operation_Id, at: l.timestamp })} />}
+        {tab === "requests" && <RequestsTab component={component} range={range} role={role} name={opFilter} onClearName={() => go({ tool: "ai", component, tab: "requests" })} onOpen={(r) => setTrace({ operationId: r.operation_Id, at: r.timestamp })} />}
+        {tab === "logs" && <LogsTab key={logSearch ?? ""} component={component} range={range} role={role} initialSearch={logSearch} onOpen={(l) => setTrace({ operationId: l.operation_Id, at: l.timestamp })} />}
         {tab === "query" && <QueryTab component={component} range={range} onOpenTrace={(operationId, at) => setTrace({ operationId, at })} />}
       </div>
       <AnimatePresence>

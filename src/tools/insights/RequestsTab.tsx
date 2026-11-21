@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, Inbox, X } from "lucide-react";
 import type { Component, Range, RequestRow } from "../../types";
@@ -7,7 +7,7 @@ import { useQuery } from "../../lib/query";
 import { cn, fmtMs, fmtTime } from "../../lib/util";
 import { Button, Chip, Empty, Field, Select, Spinner, Switch, Tip } from "../../ui/ui";
 import * as G from "../../lib/glossary";
-import { ColumnHeader, useColumns, type Col } from "../../ui/resize";
+import { ColumnHeader, sortRows, useColumns, type Col } from "../../ui/resize";
 
 const COLS: Col[] = [
   { key: "time", label: "Time", width: 160 },
@@ -31,11 +31,11 @@ export function RequestsTab({ component, range, role, name, onClearName, onOpen 
   const [minDuration, setMinDuration] = useState(0);
   const key = `aireq:${component.id}|${range}|${role ?? ""}|${name ?? ""}|${failedOnly}|${minDuration}|${applied}`;
   const q = useQuery<RequestRow[]>(key, () => api.ai.requests({ component, range, role, name, failedOnly, minDuration, search: applied || undefined, limit: 500 }));
-  const rows = q.data ?? [];
+  const columns = useColumns("ai.requests", COLS);
+  const rows = useMemo(() => sortRows(q.data ?? [], columns.sort, (r, k) => (k === "time" ? r.timestamp : k === "result" ? r.resultCode : k === "service" ? r.cloud_RoleName : k === "duration" ? r.duration : r.name)), [q.data, columns.sort]);
   const max = Math.max(1, ...rows.map((r) => r.duration));
   const scroller = useRef<HTMLDivElement>(null);
   const v = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => 36, overscan: 12 });
-  const columns = useColumns("ai.requests", COLS);
 
   return (
     <div className="flex h-full flex-col">
@@ -46,7 +46,7 @@ export function RequestsTab({ component, range, role, name, onClearName, onOpen 
         {name && <Chip className="pr-0.5">{name}<Button variant="ghost" size="icon-sm" aria-label="Clear operation filter" className="size-5" onClick={onClearName}><X /></Button></Chip>}
         <Select value={minDuration} onChange={setMinDuration} options={DURATIONS} label="Minimum duration" align="start" />
         <Switch checked={failedOnly} onChange={setFailedOnly} label="Failed only" />
-        <span className="ml-auto text-[12px] text-fg-3">{q.loading ? <Spinner className="size-3" /> : `${rows.length}${rows.length >= 500 ? "+" : ""} requests, newest first`}</span>
+        <span className="ml-auto text-[12px] text-fg-3">{q.loading ? <Spinner className="size-3" /> : `${rows.length}${rows.length >= 500 ? "+" : ""} requests, ${columns.sort ? "sorted" : "newest first"}`}</span>
       </div>
       {q.error ? (
         <Empty icon={<AlertTriangle />} title="Couldn't load requests">{q.error}</Empty>

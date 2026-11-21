@@ -3,7 +3,7 @@
 import { animate, motion, useMotionValue, useTransform, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { createContext, forwardRef, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, PanelLeft, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, Copy, PanelLeft, Search, X } from "lucide-react";
 import { isMac, isWindows, mod } from "../lib/platform";
 import { cn, copy, compact, type Env } from "../lib/util";
 
@@ -292,11 +292,31 @@ export function SidebarToggle({ className }: { className?: string }) {
   );
 }
 
+// Back and forward, like a browser. Shared by every header so they're always in the same spot.
+export const HistoryState = createContext<{ back: () => void; forward: () => void; canBack: boolean; canForward: boolean }>({ back: () => {}, forward: () => {}, canBack: false, canForward: false });
+
+export function HistoryButtons() {
+  const h = useContext(HistoryState);
+  return (
+    <div className="no-drag flex shrink-0 items-center">
+      <Tip content={{ title: "Back", body: `${mod("[")}, swipe right with two fingers, or the mouse back button.` }} side="bottom">
+        <Button variant="ghost" size="icon" aria-label="Back" disabled={!h.canBack} onClick={h.back} className="disabled:opacity-30"><ArrowLeft /></Button>
+      </Tip>
+      <Tip content={{ title: "Forward", body: `${mod("]")}, or swipe left with two fingers.` }} side="bottom">
+        <Button variant="ghost" size="icon" aria-label="Forward" disabled={!h.canForward} onClick={h.forward} className="disabled:opacity-30"><ArrowRight /></Button>
+      </Tip>
+    </div>
+  );
+}
+
 export function Header({ children }: { children: ReactNode }) {
   const { collapsed } = useContext(SidebarState);
   return (
-    <header style={winControls} className={cn("drag flex h-[52px] shrink-0 items-center gap-3 border-b border-line pr-4", collapsed ? (isMac ? "pl-[82px]" : "pl-2") : "pl-5")}>
-      {collapsed && <SidebarToggle className="-mr-1" />}
+    <header style={winControls} className={cn("drag flex h-[52px] shrink-0 items-center gap-3 border-b border-line pr-4", collapsed ? (isMac ? "pl-[82px]" : "pl-2") : "pl-3")}>
+      <div className="flex shrink-0 items-center">
+        {collapsed && <SidebarToggle />}
+        <HistoryButtons />
+      </div>
       {children}
     </header>
   );
@@ -316,7 +336,8 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
           </>
         );
         return (
-          <span key={i} className={cn("flex min-w-0 items-center gap-0.5", last ? "shrink" : i === 0 ? "shrink-[6]" : "shrink-[3]")} style={{ minWidth: last ? 72 : 40 }}>
+          // The current page keeps its name (up to 45% of the bar); the root gives up space first, then parents.
+          <span key={i} className="flex min-w-0 items-center gap-0.5" style={last ? { flexShrink: 0, maxWidth: "45%", minWidth: 72 } : { flexShrink: i === 0 ? 12 : 4, minWidth: i === 0 ? 28 : 40 }}>
             {last ? (
               <h1 title={c.label} className="flex min-w-0 items-center gap-1.5 px-1.5 text-[14px] font-semibold tracking-tight text-fg">{inner}</h1>
             ) : (
