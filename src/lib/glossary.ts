@@ -1,6 +1,7 @@
 // Plain-English explanations shown in tooltips. One place, so wording stays consistent.
 import type { Layer } from "./detect";
 import type { Env } from "./util";
+import { modClick } from "./platform";
 
 type Entry = { title: string; body?: string };
 
@@ -43,7 +44,7 @@ export const ui = {
   dlqTab: { title: "Dead-letter queue", body: "Messages Service Bus set aside because they couldn't be delivered or processed. They stay here until someone resubmits or deletes them." },
   histogram: { title: "When these messages were enqueued", body: "Each bar is a slice of time between the oldest and newest peeked message. Click a bar to show only that slice." },
   reasonChip: { title: "Filter by dead-letter reason", body: "Count of peeked messages with this reason. Click to show only these." },
-  compare: { title: "Compare two messages", body: "⌘-click another row to diff its payload and properties against the selected message." },
+  compare: { title: "Compare two messages", body: `${modClick} another row to diff its payload and properties against the selected message.` },
   copyPayload: { title: "Copy payload", body: "Copies the decoded body: unwrapped from gzip, base64 and any envelope, then pretty-printed." },
   copyMessage: { title: "Copy whole message", body: "Copies body, broker properties and application properties as one JSON document." },
   searchTree: { title: "Search the payload", body: "Highlights matching keys and values and expands the branches that contain them." },

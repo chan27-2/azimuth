@@ -43,6 +43,17 @@ for (const [name, fn] of Object.entries(handlers)) {
 }
 ipcMain.handle("openExternal", (_e, url) => shell.openExternal(url));
 
+// Window chrome follows each platform's convention. The 52px header row is the title bar on all of them.
+// macOS: traffic lights inset on the left, centred on that row.
+// Windows: native min/max/close drawn by the OS on the right (Window Controls Overlay).
+// Linux: the window manager's own frame, since title bar layouts vary by desktop.
+const HEADER = 52;
+function chrome() {
+  if (process.platform === "darwin") return { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 18, y: 19 } };
+  if (process.platform === "win32") return { titleBarStyle: "hidden", titleBarOverlay: { color: "#0a0a0a", symbolColor: "#a1a1a1", height: HEADER - 1 } };
+  return { autoHideMenuBar: true };
+}
+
 function createWindow() {
   nativeTheme.themeSource = "dark";
   if (process.platform === "darwin" && icon) app.dock?.setIcon(icon);
@@ -54,8 +65,7 @@ function createWindow() {
     backgroundColor: "#0a0a0a",
     icon,
     title: "Busscope",
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
+    ...chrome(),
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true },
   });
   if (process.env.VITE_DEV) win.loadURL("http://localhost:5199");

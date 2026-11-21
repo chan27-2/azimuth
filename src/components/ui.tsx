@@ -3,7 +3,8 @@
 import { animate, motion, useMotionValue, useTransform, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { createContext, forwardRef, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
-import { Check, ChevronDown, Copy, Search, X } from "lucide-react";
+import { Check, ChevronDown, Copy, PanelLeft, Search, X } from "lucide-react";
+import { isMac, isWindows, mod } from "../lib/platform";
 import { cn, copy, compact, type Env } from "../lib/util";
 
 export const ring = "outline-none focus-visible:ring-2 focus-visible:ring-fg/15 focus-visible:ring-offset-0";
@@ -270,11 +271,33 @@ export function Empty({ icon, title, children }: { icon?: ReactNode; title: stri
   );
 }
 
-// Window header: 52px, draggable, shared by every screen.
-export const HeaderInset = createContext(false);
+// Window header: 52px, draggable, shared by every screen. It doubles as the title bar, so it leaves room
+// for the OS window controls: traffic lights on the left on macOS, min/max/close on the right on Windows.
+// When the sidebar is hidden, its toggle moves here, right after the traffic lights.
+export const SidebarState = createContext<{ collapsed: boolean; toggle: () => void }>({ collapsed: false, toggle: () => {} });
+export const MAC_INSET = "pl-[88px]";
+// Windows draws its caption buttons over the top-right corner; env() gives the area left for us.
+const winControls = isWindows ? { paddingRight: "calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 16px)" } : undefined;
+
+export function SidebarToggle({ className }: { className?: string }) {
+  const { collapsed, toggle } = useContext(SidebarState);
+  return (
+    <Tip content={{ title: collapsed ? "Show sidebar" : "Hide sidebar", body: `Shortcut: ${mod("B")}` }} side="bottom">
+      <Button variant="ghost" size="icon" onClick={toggle} aria-label={collapsed ? "Show sidebar" : "Hide sidebar"} className={cn("no-drag shrink-0 text-fg-3", className)}>
+        <PanelLeft />
+      </Button>
+    </Tip>
+  );
+}
+
 export function Header({ children }: { children: ReactNode }) {
-  const inset = useContext(HeaderInset);
-  return <header className={cn("drag flex h-[52px] shrink-0 items-center gap-3 border-b border-line pr-4 transition-[padding] duration-300", inset ? "pl-[124px]" : "pl-5")}>{children}</header>;
+  const { collapsed } = useContext(SidebarState);
+  return (
+    <header style={winControls} className={cn("drag flex h-[52px] shrink-0 items-center gap-3 border-b border-line pr-4", collapsed ? (isMac ? "pl-[82px]" : "pl-2") : "pl-5")}>
+      {collapsed && <SidebarToggle className="-mr-1" />}
+      {children}
+    </header>
+  );
 }
 export const NoDrag = ({ children, className }: { children: ReactNode; className?: string }) => <div className={cn("no-drag flex items-center gap-2", className)}>{children}</div>;
 

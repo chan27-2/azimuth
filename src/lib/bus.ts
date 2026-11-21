@@ -1,6 +1,6 @@
 // Typed client for the main process. Rebuilds errors with their code and detail (see electron/preload.cjs).
 type Result = { ok: true; data: unknown } | { ok: false; error: string; code?: string; detail?: unknown };
-type Ipc = { invoke(name: string, arg?: unknown): Promise<Result>; openExternal(url: string): Promise<void> };
+type Ipc = { invoke(name: string, arg?: unknown): Promise<Result>; openExternal(url: string): Promise<void>; platform: string };
 
 const ipc = (window as unknown as { busIpc: Ipc }).busIpc;
 

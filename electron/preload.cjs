@@ -4,4 +4,5 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("busIpc", {
   invoke: (name, arg) => ipcRenderer.invoke(name, arg),
   openExternal: (url) => ipcRenderer.invoke("openExternal", url),
+  platform: process.platform,
 });

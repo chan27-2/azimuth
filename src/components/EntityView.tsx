@@ -9,6 +9,7 @@ import { b64ToBytes, detect, type Detection } from "../lib/detect";
 import { ago, cn, envOf, fmtTime } from "../lib/util";
 import { AnimatedNumber, Button, Chip, Empty, EnvBadge, Field, Header, NoDrag, Select, Spinner, Tabs, Tip } from "./ui";
 import * as G from "../lib/glossary";
+import { mod, modClick } from "../lib/platform";
 import { MessageDetail } from "./MessageDetail";
 
 export type Item = { msg: Message; det: Detection };
@@ -87,7 +88,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
     <div className="flex h-full flex-col">
       <Header>
         <nav aria-label="Breadcrumb" className="no-drag -ml-1.5 flex min-w-0 items-center gap-1 text-[13px]">
-          <Tip content={{ title: `Back to ${entity.ns.name}`, body: "Topology and totals for the whole namespace. Shortcut: ⌘[" }} side="bottom" className="min-w-[56px] shrink-[4]">
+          <Tip content={{ title: `Back to ${entity.ns.name}`, body: `Topology and totals for the whole namespace. Shortcut: ${mod("[")}` }} side="bottom" className="min-w-[56px] shrink-[4]">
             <button onClick={onBack} className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-fg-3 transition-colors duration-150 hover:bg-bg-2 hover:text-fg">
               <Network className="size-3.5 shrink-0" />
               <span className="truncate">{entity.ns.name}</span>
@@ -179,7 +180,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
                 <GitCompare /> Comparing #{compare} <X />
               </Button>
             )}
-            {!compare && items.length > 1 && <Tip content={G.ui.compare} side="bottom"><span className="cursor-help">⌘-click a row to compare</span></Tip>}
+            {!compare && items.length > 1 && <Tip content={G.ui.compare} side="bottom"><span className="cursor-help">{modClick} a row to compare</span></Tip>}
           </div>
           {q.loading && !q.data ? (
             <div className="flex flex-1 items-center justify-center gap-2 text-[13px] text-fg-3"><Spinner /> Peeking messages</div>

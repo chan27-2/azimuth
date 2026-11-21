@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Network, PanelLeft, Terminal } from "lucide-react";
+import { Network, Terminal } from "lucide-react";
 import type { EntityRef, Namespace, Sub, Account } from "./types";
 import { useQuery } from "./lib/query";
 import { Sidebar } from "./components/Sidebar";
 import { Overview } from "./components/Overview";
 import { EntityView } from "./components/EntityView";
 import { CommandMenu } from "./components/CommandMenu";
-import { Button, Empty, Header, HeaderInset, Kbd, Spinner } from "./components/ui";
+import { Empty, Header, Kbd, SidebarState, Spinner } from "./components/ui";
+import { mod } from "./lib/platform";
 
 const refKey = (r: EntityRef) => (r.kind === "queue" ? `${r.ns.id}|q|${r.queue}` : `${r.ns.id}|s|${r.topic}|${r.subscription}`) + (r.dlq ? "|dlq" : "");
 
@@ -59,7 +60,7 @@ export function App() {
     );
 
   return (
-    <HeaderInset.Provider value={collapsed}>
+    <SidebarState.Provider value={{ collapsed, toggle }}>
       <div className="flex h-full">
         {subs.data ? (
           <Sidebar
@@ -93,18 +94,15 @@ export function App() {
                 <div className="flex h-full flex-col">
                   <Header><span /></Header>
                   <Empty icon={<Network />} title="Busscope">
-                    {account.data ? <>Pick a namespace to see its topology, or press <Kbd>⌘K</Kbd> to jump anywhere.</> : "Connecting…"}
+                    {account.data ? <>Pick a namespace to see its topology, or press <Kbd>{mod("K")}</Kbd> to jump anywhere.</> : "Connecting…"}
                   </Empty>
                 </div>
               )}
             </motion.div>
           </AnimatePresence>
         </main>
-        <Button variant="ghost" size="icon" onClick={toggle} aria-label={collapsed ? "Show sidebar" : "Hide sidebar"} title="Toggle sidebar (⌘B)" className="no-drag fixed left-[76px] top-[10px] z-30">
-          <PanelLeft />
-        </Button>
         {subs.data && <CommandMenu open={cmd} onClose={() => setCmd(false)} subs={visibleSubs ?? []} onNs={selectNs} onEntity={selectEntity} />}
       </div>
-    </HeaderInset.Provider>
+    </SidebarState.Provider>
   );
 }

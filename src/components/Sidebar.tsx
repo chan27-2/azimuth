@@ -4,7 +4,8 @@ import { Box, ChevronRight, ChevronUp, CircleSlash, Inbox, Layers, Lock, Network
 import { canRead, type Access, type Account, type EntityRef, type Namespace, type Sub, type Entities } from "../types";
 import { fetchQuery, invalidate, useQuery } from "../lib/query";
 import { cn, envOf } from "../lib/util";
-import { Button, Checkbox, Count, EnvBadge, Field, Kbd, Spinner, Tip } from "./ui";
+import { Button, Checkbox, Count, EnvBadge, Field, Kbd, MAC_INSET, SidebarToggle, Spinner, Tip } from "./ui";
+import { isMac, mod } from "../lib/platform";
 import { Logo } from "./Logo";
 import * as G from "../lib/glossary";
 
@@ -32,12 +33,13 @@ export function Sidebar(p: Props & { width: number; collapsed: boolean; onResize
       className="relative h-full shrink-0 overflow-hidden border-r border-line bg-bg"
       style={{ borderRightWidth: p.collapsed ? 0 : 1 }}
     >
-      <div className="flex h-full flex-col" style={{ width: p.width }}>
-        <div className="drag flex h-[52px] shrink-0 items-center pl-[118px]">
-          <div className="flex items-center gap-2">
-            <Logo className="size-6" />
-            <span className="text-[14px] font-semibold tracking-[-0.02em] text-fg">Busscope</span>
+      <div className="flex h-full flex-col" style={{ width: p.width }} inert={p.collapsed}>
+        <div className={cn("drag flex h-[52px] shrink-0 items-center justify-between pr-2", isMac ? MAC_INSET : "pl-4")}>
+          <div className="flex min-w-0 items-center gap-2">
+            <Logo className="size-6 shrink-0" />
+            <span className="truncate text-[14px] font-semibold tracking-[-0.02em] text-fg">Busscope</span>
           </div>
+          <SidebarToggle />
         </div>
         <div className="px-3 pb-1">
           <button
@@ -46,7 +48,7 @@ export function Sidebar(p: Props & { width: number; collapsed: boolean; onResize
           >
             <Search className="size-3.5" />
             <span className="flex-1 text-left">Jump to…</span>
-            <Kbd>⌘K</Kbd>
+            <Kbd>{mod("K")}</Kbd>
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
