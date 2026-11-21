@@ -336,8 +336,8 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
           </>
         );
         return (
-          // The current page keeps its name (up to 45% of the bar); the root gives up space first, then parents.
-          <span key={i} className="flex min-w-0 items-center gap-0.5" style={last ? { flexShrink: 0, maxWidth: "45%", minWidth: 72 } : { flexShrink: i === 0 ? 12 : 4, minWidth: i === 0 ? 28 : 40 }}>
+          // The current page keeps its name (up to 420px); the root gives up space first, then parents.
+          <span key={i} className="flex min-w-0 items-center gap-0.5" style={last ? { flexShrink: 0, maxWidth: 420, minWidth: 72 } : { flexShrink: i === 0 ? 12 : 4, minWidth: i === 0 ? 28 : 40 }}>
             {last ? (
               <h1 title={c.label} className="flex min-w-0 items-center gap-1.5 px-1.5 text-[14px] font-semibold tracking-tight text-fg">{inner}</h1>
             ) : (

@@ -33,14 +33,13 @@ const componentFor = (a) => {
 };
 export const insights = async ({ app: a }) => (await wait(600), componentFor(a));
 
-const RANGE_MS = { "30m": 18e5, "1h": 36e5, "6h": 216e5, "24h": 864e5, "3d": 2592e5, "7d": 6048e5, "30d": 2592e6 };
 
 export async function stats({ link, functionNames, range = "24h" }) {
   await wait(300);
   const c = componentById(link.component.id);
   const quiet = ["RunFulfilment", "ReserveStock", "LegacyCsvImport"];
   return functionNames.filter((n) => !quiet.includes(n)).map((name) => {
-    const runs = functionRuns(c, link.role, name, RANGE_MS[range] ?? RANGE_MS["24h"], 400, false);
+    const runs = functionRuns(c, link.role, name, range, 400, false);
     if (!runs.length) return null;
     const d = runs.map((r) => r.duration).sort((a, b) => a - b);
     return { name, n: runs.length * 20, failed: runs.filter((r) => r.success === "False").length * 20, p50: d[Math.floor(d.length / 2)], p95: d[Math.floor(d.length * 0.95)], lastRun: runs[0].timestamp };
@@ -50,7 +49,7 @@ export async function stats({ link, functionNames, range = "24h" }) {
 export async function invocations({ link, fn, range = "24h", failedOnly, limit = 300 }) {
   await wait(300);
   if (["RunFulfilment", "ReserveStock", "LegacyCsvImport"].includes(fn)) return [];
-  return functionRuns(componentById(link.component.id), link.role, fn, RANGE_MS[range] ?? RANGE_MS["24h"], limit, failedOnly);
+  return functionRuns(componentById(link.component.id), link.role, fn, range, limit, failedOnly);
 }
 
 // Pretend App Insights ingestion takes ~12 seconds after a run.

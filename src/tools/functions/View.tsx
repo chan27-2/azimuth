@@ -22,7 +22,7 @@ type InvOrder = "newest" | "oldest" | "slowest" | "failed";
 
 const FN_COLS: Col[] = [
   { key: "name", label: "Function", width: 300 },
-  { key: "trigger", label: "Trigger", width: 300 },
+  { key: "trigger", label: "Trigger", width: 0, flex: true, min: 200 },
   { key: "runs", label: "Runs", width: 84, align: "right" },
   { key: "failed", label: "Failed", width: 84, align: "right" },
   { key: "p95", label: "p95", width: 84, align: "right" },
@@ -74,7 +74,7 @@ function Frame({ app, fn, link, range, setRange, actions, children }: Common & {
         <Tip content={G.env[env]}><EnvBadge env={env} /></Tip>
         {app.state !== "Running" && <Chip tone="warn">{app.state}</Chip>}
         <NoDrag className="ml-auto">
-          <RangeSelect value={range} onChange={setRange} />
+          <RangeSelect value={range} onChange={setRange} retentionDays={link?.component.retentionDays} />
           <Tip content="Load again" side="bottom">
             <Button variant="ghost" size="icon" aria-label="Refresh" onClick={() => invalidate((k) => k.includes(app.id) || (!!link && k.startsWith("ai") && !k.startsWith("aicomp:") && k.includes(link.component.id)))}><RefreshCw /></Button>
           </Tip>
@@ -145,7 +145,6 @@ function AppPage(p: Common & { fnsError?: string; fnsLoading: boolean; onChooseL
                   <Th col={FN_COLS[3]} columns={columns} className="px-2 py-1.5" />
                   <Th col={FN_COLS[4]} columns={columns} className="px-2 py-1.5"><Tip content={G.ai.p95}><span>p95</span></Tip></Th>
                   <Th col={FN_COLS[5]} columns={columns} className="px-2 py-1.5" />
-                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -164,7 +163,6 @@ function AppPage(p: Common & { fnsError?: string; fnsLoading: boolean; onChooseL
                       <td className={cn("px-2 py-2 text-right tabular", s?.failed ? "text-bad" : "text-fg-3")}>{s?.failed ? pct(s.failed, s.n) : "—"}</td>
                       <td className="px-2 py-2 text-right tabular text-fg-2">{s ? fmtMs(s.p95) : "—"}</td>
                       <td className="px-2 py-2 text-right tabular text-fg-3">{s ? ago(s.lastRun) : "—"}</td>
-                      <td />
                     </tr>
                   );
                 })}

@@ -64,7 +64,7 @@ function ComponentView({ place }: { place: Extract<Place, { tool: "ai" }> & { co
               <Select value={role ?? ""} onChange={(v) => setRole(v || null)} label="Service" options={[{ value: "", label: "All services" }, ...roles.data!.roles.map((r) => ({ value: r, label: r }))]} />
             </Tip>
           )}
-          <RangeSelect value={range} onChange={setRange} />
+          <RangeSelect value={range} onChange={setRange} retentionDays={component.retentionDays} />
           <Tip content="Run the queries again" side="bottom"><Button variant="ghost" size="icon" aria-label="Refresh" onClick={refresh}><RefreshCw /></Button></Tip>
         </NoDrag>
       </Header>

@@ -51,6 +51,7 @@ Run is the only thing in Azimuth that changes anything, so it's careful:
 
 ![An operation as a waterfall across three services](docs/trace.webp)
 
+- **Time ranges** from the last 30 minutes to the last 90 days, or any custom window (local time, with Today, Yesterday, Last 14 days and This month shortcuts). Ranges beyond the resource's retention are flagged.
 - **Overview.** Requests, failure rate, p50 and p95, exceptions and failed dependency calls, a timeline, top operations and top exceptions. Filter by service (`cloud_RoleName`) when several apps share a resource.
 - **Requests and Logs** with filters, and a live tail that polls every 10 seconds for newer entries only.
 - **Traces.** Requests and dependencies nested by parent span, logs pinned to the span that wrote them, service colours, and a detail pane with properties and stack traces. If part of an operation was logged to another resource, **Look in other resources** stitches it together.

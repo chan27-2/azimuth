@@ -62,7 +62,7 @@ export type Component = {
   id: string; name: string; subscriptionId: string; resourceGroup: string; location: string; appId: string; kind: string;
   workspace: string | null; retentionDays: number | null; samplingPercentage: number | null;
 };
-export type Range = "30m" | "1h" | "6h" | "24h" | "3d" | "7d" | "30d";
+export type Range = "30m" | "1h" | "6h" | "24h" | "3d" | "7d" | "30d" | "60d" | "90d" | `c:${string}`;
 export type Overview = {
   totals: { total?: number; failed?: number; p50?: number; p95?: number; exceptions?: number; dependencies?: number; depFailed?: number };
   timeline: { timestamp: string; total: number; failed: number }[];

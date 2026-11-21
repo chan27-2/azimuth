@@ -177,11 +177,11 @@ export function useColumns(id: string, cols: Col[]) {
   return { template, total, width, handle, sort, toggleSort };
 }
 
-// A <th> with a stored width and a drag handle, for real tables (table-layout: fixed, plus a trailing
-// empty <th /> so the last column doesn't stretch).
+// A <th> with a stored width and a drag handle, for real tables (table-layout: fixed). A flex column
+// takes the spare width; give the table `minWidth: columns.total` so it scrolls instead of squashing.
 export function Th({ col, columns, className, children }: { col: Col; columns: ReturnType<typeof useColumns>; className?: string; children?: ReactNode }) {
   return (
-    <th className={cn("relative truncate font-normal", col.align === "right" ? "text-right" : "text-left", className)} style={{ width: columns.width(col) }} title={col.title}>
+    <th className={cn("relative truncate font-normal", col.align === "right" ? "text-right" : "text-left", className)} style={{ width: col.flex ? undefined : columns.width(col) }} title={col.title}>
       {col.sortable === false ? children ?? col.label : (
         <SortLabel label={children ?? col.label} active={columns.sort?.key === col.key} dir={columns.sort?.dir} align={col.align} onClick={() => columns.toggleSort(col.key)} />
       )}

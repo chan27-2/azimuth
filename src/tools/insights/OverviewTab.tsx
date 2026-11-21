@@ -9,7 +9,7 @@ import { AnimatedNumber, Empty, Spinner, Tip, type TipContent } from "../../ui/u
 import { Th, sortRows, useColumns, type Col } from "../../ui/resize";
 
 const OP_COLS: Col[] = [
-  { key: "name", label: "Name", width: 340 },
+  { key: "name", label: "Name", width: 0, flex: true, min: 220 },
   { key: "n", label: "Count", width: 84, align: "right" },
   { key: "failed", label: "Failed", width: 84, align: "right", title: "Failure rate" },
   { key: "p50", label: "p50", width: 84, align: "right" },
@@ -53,7 +53,6 @@ export function OverviewTab({ component, range, role, onOperation, onException }
                   <Th col={OP_COLS[2]} columns={columns} className="px-2 py-1.5" />
                   <Th col={OP_COLS[3]} columns={columns} className="px-2 py-1.5"><Tip content={G.ai.p50}><span>p50</span></Tip></Th>
                   <Th col={OP_COLS[4]} columns={columns} className="px-2 py-1.5"><Tip content={G.ai.p95}><span>p95</span></Tip></Th>
-                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -64,10 +63,9 @@ export function OverviewTab({ component, range, role, onOperation, onException }
                     <td className={cn("px-2 py-2 text-right tabular", op.failed ? "text-bad" : "text-fg-3")}>{op.failed ? pct(op.failed, op.n) : "—"}</td>
                     <td className="px-2 py-2 text-right tabular text-fg-2">{fmtMs(op.p50)}</td>
                     <td className="px-2 py-2 text-right tabular text-fg-2">{fmtMs(op.p95)}</td>
-                    <td />
                   </tr>
                 ))}
-                {!o.operations.length && <tr><td colSpan={6} className="px-4 py-6 text-center text-fg-3">No requests</td></tr>}
+                {!o.operations.length && <tr><td colSpan={5} className="px-4 py-6 text-center text-fg-3">No requests</td></tr>}
               </tbody>
             </table>
             </div>

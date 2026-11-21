@@ -55,7 +55,10 @@ export function LogsTab({ component, range, role, initialSearch, onOpen, operati
   const [search, setSearch] = useState(initialSearch ?? "");
   const [applied, setApplied] = useState(initialSearch ?? "");
   const [level, setLevel] = useState(0);
-  const [live, setLive] = useState(false);
+  const [liveOn, setLive] = useState(false);
+  // A custom range that ends in the past has nothing new to tail.
+  const pastRange = range.startsWith("c:") && new Date(range.split("/")[1]).getTime() < Date.now() - 60_000;
+  const live = liveOn && !pastRange;
   const [selected, setSelected] = useState<string | null>(null);
   const key = `ailogs:${component.id}|${range}|${role ?? ""}|${level}|${applied}|${operationName ?? ""}`;
   const q = useQuery<LogRow[]>(key, () => api.ai.logs({ component, range, role, minSeverity: level, search: applied || undefined, operationName, limit: 500 }));
@@ -83,7 +86,7 @@ export function LogsTab({ component, range, role, initialSearch, onOpen, operati
         <Select value={level} onChange={setLevel} options={LEVELS} label="Severity" align="start" />
         <Tip content={G.ai.live} side="bottom">
           <span className="inline-flex items-center gap-2">
-            <Switch checked={live} onChange={setLive} label="Live" />
+            <span className={pastRange ? "pointer-events-none opacity-40" : ""}><Switch checked={live} onChange={setLive} label="Live" /></span>
             {live && <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-ok opacity-60" /><span className="relative inline-flex size-2 rounded-full bg-ok" /></span>}
           </span>
         </Tip>

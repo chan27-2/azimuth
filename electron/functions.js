@@ -134,7 +134,7 @@ const roleWhere = (role) => (role ? `| where cloud_RoleName == ${ai.kq(role)}` :
 
 export async function stats({ link, functionNames, range }) {
   if (!functionNames.length) return [];
-  const { span } = ai.RANGES[range] ?? ai.RANGES["24h"];
+  const { span } = ai.rangeOf(range);
   const r = await ai.run(link.component, `requests ${roleWhere(link.role)}
     | where name in~ ${ai.kqList(functionNames)}
     | summarize n = sum(itemCount), failed = sumif(itemCount, tostring(success) =~ 'false'), p50 = percentile(duration, 50), p95 = percentile(duration, 95), lastRun = max(timestamp) by name`, span);
@@ -142,7 +142,7 @@ export async function stats({ link, functionNames, range }) {
 }
 
 export async function invocations({ link, fn, range, failedOnly, limit = 300 }) {
-  const { span } = ai.RANGES[range] ?? ai.RANGES["24h"];
+  const { span } = ai.rangeOf(range);
   const r = await ai.run(link.component, `requests ${roleWhere(link.role)}
     | where name =~ ${ai.kq(fn)}
     ${failedOnly ? "| where tostring(success) =~ 'false'" : ""}

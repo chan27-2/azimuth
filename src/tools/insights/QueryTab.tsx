@@ -8,7 +8,7 @@ import { cn, copy, fmtMs } from "../../lib/util";
 import { mod } from "../../lib/platform";
 import * as G from "../../lib/glossary";
 import { Button, Empty, Kbd, Select, Spinner, Tip } from "../../ui/ui";
-import { RANGES } from "./common";
+import { RangeSelect } from "./common";
 import { PanelToggle, ResizeHandle, SidePanel, SortLabel, sortRows, usePanel, useSort } from "../../ui/resize";
 import { SmartText, deepParse, oneLine } from "../../ui/SmartText";
 import { JsonTree } from "../../ui/viewers/JsonTree";
@@ -89,7 +89,7 @@ export function QueryTab({ component, range: defaultRange, onOpenTrace }: { comp
           <div className="flex items-center gap-2 border-t border-line px-2 py-1.5">
             <Tip content={G.ai.kql}><span className="cursor-help px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-fg-3">KQL</span></Tip>
             <Select value="" onChange={(s) => s && setKql(s)} label="Examples" align="start" options={[{ value: "", label: "Examples" }, ...SAMPLES]} />
-            <Select value={range} onChange={setRange} options={RANGES} label="Time range" align="start" />
+            <RangeSelect value={range} onChange={setRange} retentionDays={component.retentionDays} align="start" />
             <span className="ml-auto text-[11.5px] text-fg-3"><Kbd>{mod("↵")}</Kbd> to run</span>
             <Button onClick={run} disabled={busy || !kql.trim()}>{busy ? <Spinner className="size-3" /> : <Play />} Run</Button>
           </div>

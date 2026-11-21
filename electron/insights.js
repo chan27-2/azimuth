@@ -16,9 +16,24 @@ export const RANGES = {
   "24h": { span: "P1D", bin: "30m" },
   "3d": { span: "P3D", bin: "2h" },
   "7d": { span: "P7D", bin: "4h" },
-  "30d": { span: "P30D", bin: "1d" },
+  "30d": { span: "P30D", bin: "12h" },
+  "60d": { span: "P60D", bin: "1d" },
+  "90d": { span: "P90D", bin: "1d" },
 };
-const range = (r) => RANGES[r] ?? RANGES["24h"];
+
+// Custom ranges arrive as "c:<from ISO>/<to ISO>" and become an exact ISO 8601 interval. The timeline
+// bucket is the smallest that keeps the chart under ~120 bars.
+const BINS = [["1m", 6e4], ["2m", 12e4], ["5m", 3e5], ["10m", 6e5], ["15m", 9e5], ["30m", 18e5], ["1h", 36e5], ["2h", 72e5], ["4h", 144e5], ["6h", 216e5], ["12h", 432e5], ["1d", 864e5], ["2d", 1728e5], ["7d", 6048e5]];
+export function rangeOf(r) {
+  const m = /^c:([^/]+)\/([^/]+)$/.exec(String(r ?? ""));
+  if (!m) return RANGES[r] ?? RANGES["24h"];
+  const from = new Date(m[1]), to = new Date(m[2]);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) throw new AppError("That time range isn't valid: the start must be before the end.", "BAD_INPUT");
+  const ms = to - from;
+  const bin = (BINS.find(([, b]) => ms / b <= 120) ?? BINS[BINS.length - 1])[0];
+  return { span: `${from.toISOString()}/${to.toISOString()}`, bin };
+}
+const range = rangeOf;
 
 // W3C traceparent, Request-Id (|traceid.spanid.) or a bare operation id → the operation id.
 export function operationIdOf(input) {

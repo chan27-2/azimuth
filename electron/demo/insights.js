@@ -20,9 +20,16 @@ const byId = (id) => all().find((c) => c.id === id);
 export const components = async (subId) => (await wait(150), (COMPONENTS[subId] ?? []).map(strip));
 
 // ─── Trace generator ──────────────────────────────────────────────────────────
-const RANGE_MS = { "30m": 18e5, "1h": 36e5, "6h": 216e5, "24h": 864e5, "3d": 2592e5, "7d": 6048e5, "30d": 2592e6 };
-const BIN = { "30m": 6e4, "1h": 12e4, "6h": 6e5, "24h": 18e5, "3d": 72e5, "7d": 144e5, "30d": 864e5 };
-const BIN_LABEL = { "30m": "1m", "1h": "2m", "6h": "10m", "24h": "30m", "3d": "2h", "7d": "4h", "30d": "1d" };
+const RANGE_MS = { "30m": 18e5, "1h": 36e5, "6h": 216e5, "24h": 864e5, "3d": 2592e5, "7d": 6048e5, "30d": 2592e6, "60d": 5184e6, "90d": 7776e6 };
+const BINS = [["1m", 6e4], ["2m", 12e4], ["5m", 3e5], ["10m", 6e5], ["15m", 9e5], ["30m", 18e5], ["1h", 36e5], ["2h", 72e5], ["4h", 144e5], ["6h", 216e5], ["12h", 432e5], ["1d", 864e5], ["2d", 1728e5], ["7d", 6048e5]];
+// { from, to } in ms for a preset ("24h") or a custom range ("c:<from>/<to>"), like electron/insights.js.
+export function windowOf(r) {
+  const m = /^c:([^/]+)\/([^/]+)$/.exec(String(r ?? ""));
+  if (m) return { from: new Date(m[1]).getTime(), to: Math.min(Date.now(), new Date(m[2]).getTime()) };
+  const now = Date.now();
+  return { from: now - (RANGE_MS[r] ?? RANGE_MS["24h"]), to: now };
+}
+const binOf = (ms) => BINS.find(([, b]) => ms / b <= 120) ?? BINS[BINS.length - 1];
 const iso = (ms) => new Date(ms).toISOString();
 
 function item(base, extra) {
@@ -122,12 +129,12 @@ const matchRole = (role) => (x) => !role || x.cloud_RoleName === role;
 export async function overview({ component, range = "24h", role }) {
   await wait(350);
   const c = byId(component.id);
-  const span = RANGE_MS[range] ?? RANGE_MS["24h"];
-  const bin = BIN[range] ?? BIN["24h"];
+  const { from, to } = windowOf(range);
+  const [binLabel, bin] = binOf(to - from);
   const scale = (c.name.includes("prod") ? 24 : 3) * (role ? 0.4 : 1);
-  const now = Date.now();
+  const now = to;
   const timeline = [];
-  for (let t = Math.floor((now - span) / bin) * bin; t <= now; t += bin) {
+  for (let t = Math.floor(from / bin) * bin; t <= now; t += bin) {
     const r = rng(`${c.name}${role}${t}`);
     const day = Math.sin(((t / 36e5) % 24) / 24 * Math.PI * 2 - 1.8) * 0.45 + 1;
     const total = Math.round((bin / 6e4) * scale * day * (0.85 + r() * 0.3));
@@ -150,17 +157,17 @@ export async function overview({ component, range = "24h", role }) {
       { problemId: "System.InvalidOperationException at NightlyInvoiceExport.Run", n: 3, lastSeen: iso(now - 26 * 36e5), type: "System.InvalidOperationException", message: "Sequence contains no matching element", role: c.roles.find((x) => x.endsWith("-func")), operation: "NightlyInvoiceExport" },
     ].filter((e) => c.roles.includes(e.role) && (!role || e.role === role)),
     roles: c.roles,
-    bin: BIN_LABEL[range],
+    bin: binLabel,
   };
 }
 
 export async function requests({ component, range = "24h", role, name, failedOnly, minDuration, search, limit = 500 }) {
   await wait(300);
   const c = byId(component.id);
-  const now = Date.now();
+  const { from, to } = windowOf(range);
   const out = [];
   let scanned = 0;
-  for (const op of opsBack(c, now - (RANGE_MS[range] ?? RANGE_MS["24h"]), now)) {
+  for (const op of opsBack(c, from, to)) {
     if (++scanned > 6000 || out.length >= limit) break;
     for (const x of makeTrace(op.operationId, op.at, c).items) {
       if (x.itemType !== "request" || !matchRole(role)(x)) continue;
@@ -177,8 +184,9 @@ export async function requests({ component, range = "24h", role, name, failedOnl
 export async function logs({ component, range = "24h", role, minSeverity = 0, search, operationName, after, limit = 500 }) {
   await wait(after ? 120 : 300);
   const c = byId(component.id);
-  const now = Date.now();
-  const from = after ? new Date(after).getTime() : now - (RANGE_MS[range] ?? RANGE_MS["24h"]);
+  const w = windowOf(range);
+  const now = after ? Date.now() : w.to;
+  const from = after ? new Date(after).getTime() : w.from;
   const out = [];
   let scanned = 0;
   for (const op of opsBack(c, from - 60_000, now)) {
@@ -237,12 +245,12 @@ export async function query({ component, kql }) {
 }
 
 // Used by demo Functions for invocation history.
-export function functionRuns(c, role, fn, rangeMs, limit, failedOnly) {
-  const now = Date.now();
+export function functionRuns(c, role, fn, range, limit, failedOnly) {
+  const { from, to: now } = windowOf(range);
   const step = fn === "NightlyInvoiceExport" ? 864e5 : fn === "PlaceOrder" ? 45_000 : 30_000;
   const out = [];
   let scanned = 0;
-  for (const op of opsBack(c, now - rangeMs, now, step, fn)) {
+  for (const op of opsBack(c, from, now, step, fn)) {
     if (++scanned > 3000 || out.length >= limit) break;
     const forced = fn === "NightlyInvoiceExport" ? "timer" : "events";
     remembered.set(op.operationId, { at: op.at, c, forced, fnName: fn });
