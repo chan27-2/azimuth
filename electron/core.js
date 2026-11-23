@@ -5,6 +5,8 @@ import { promisify } from "node:util";
 import { AzureCliCredential } from "@azure/identity";
 
 const run = promisify(execFile);
+// On Windows az is az.cmd, a batch file, which Node only runs through a shell. Every az argument is a fixed string.
+const azOpts = process.platform === "win32" ? { shell: true, windowsHide: true } : {};
 
 export class AppError extends Error {
   constructor(message, code, detail) {
@@ -16,7 +18,7 @@ export class AppError extends Error {
 
 // ─── Accounts ─────────────────────────────────────────────────────────────────
 export async function account() {
-  const { stdout } = await run("az", ["account", "show", "-o", "json"], { timeout: 30_000 });
+  const { stdout } = await run("az", ["account", "show", "-o", "json"], { timeout: 30_000, ...azOpts });
   const a = JSON.parse(stdout);
   return { user: a.user?.name, tenantId: a.tenantId, defaultSubscription: a.name };
 }
@@ -24,7 +26,7 @@ export async function account() {
 // Every enabled subscription from every account az is signed in to. Tenant-level entries
 // (signed in to a tenant with no subscriptions) have id === tenantId and are skipped.
 export async function subscriptions() {
-  const { stdout } = await run("az", ["account", "list", "--all", "-o", "json"], { timeout: 30_000 });
+  const { stdout } = await run("az", ["account", "list", "--all", "-o", "json"], { timeout: 30_000, ...azOpts });
   return JSON.parse(stdout)
     .filter((s) => s.state === "Enabled" && s.id && s.id !== s.tenantId)
     .map((s) => ({ id: s.id, name: s.name, tenantId: s.tenantId, user: s.user?.name ?? "unknown", isDefault: !!s.isDefault }))
@@ -36,7 +38,7 @@ export async function subscriptions() {
 let login = null;
 export function addAccount() {
   if (login) return login.done;
-  const child = spawn("az", ["login", "--only-show-errors", "-o", "none"], { stdio: ["ignore", "ignore", "pipe"] });
+  const child = spawn("az", ["login", "--only-show-errors", "-o", "none"], { stdio: ["ignore", "ignore", "pipe"], ...azOpts });
   let stderr = "";
   child.stderr.on("data", (d) => (stderr += d));
   const done = new Promise((resolve, reject) => {
