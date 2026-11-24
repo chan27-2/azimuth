@@ -84,6 +84,14 @@ export function App() {
 
   const place: Place = tool === "home" ? { tool: "home" } : places[tool];
 
+  // A tool with nothing selected asks you to pick from the sidebar, so arriving there opens it.
+  // Keyed on the place, so collapsing it again afterwards sticks.
+  const empty = place.tool !== "home" && !Object.entries(place).some(([k, v]) => k !== "tool" && v !== undefined);
+  const placeKey = JSON.stringify(place);
+  useEffect(() => {
+    if (empty) setCollapsed((c) => { if (c) store("sidebar.collapsed", false); return false; });
+  }, [empty, placeKey]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
