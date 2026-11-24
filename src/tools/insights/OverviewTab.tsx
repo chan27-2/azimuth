@@ -16,8 +16,8 @@ const OP_COLS: Col[] = [
   { key: "p95", label: "p95", width: 90, align: "right" },
 ];
 
-export function OverviewTab({ component, range, role, onOperation, onException }: {
-  component: Component; range: Range; role: string | null; onOperation: (name: string) => void; onException: (type: string) => void;
+export function OverviewTab({ component, range, role, onOperation, onException, onRange }: {
+  component: Component; range: Range; role: string | null; onOperation: (name: string) => void; onException: (type: string) => void; onRange: (r: Range) => void;
 }) {
   const columns = useColumns("ai.operations", OP_COLS);
   const q = useQuery<Overview>(`aiov:${component.id}|${range}|${role ?? ""}`, () => api.ai.overview({ component, range, role }));
@@ -39,7 +39,7 @@ export function OverviewTab({ component, range, role, onOperation, onException }
           <Kpi tip={G.ai.depFailed} label="Failed calls" value={t.depFailed ?? 0} sub={`of ${compact(t.dependencies ?? 0)}`} tone={(t.depFailed ?? 0) > 0 ? "warn" : undefined} />
         </div>
 
-        <Timeline data={o.timeline} bin={o.bin} />
+        <Timeline data={o.timeline} bin={o.bin} onRange={onRange} />
 
         <div className="grid grid-cols-[3fr_2fr] gap-5">
           <section className="min-w-0 overflow-hidden rounded-xl border border-line">
@@ -104,25 +104,37 @@ function Kpi({ label, value, text, sub, tone, tip }: { label: string; value?: nu
   );
 }
 
-function Timeline({ data, bin }: { data: Overview["timeline"]; bin: string }) {
+// KQL timespans as used for bins: 1m, 30m, 2h, 1d.
+const binMs = (bin: string) => {
+  const m = /^(\d+)([mhd])$/.exec(bin);
+  return m ? Number(m[1]) * { m: 6e4, h: 36e5, d: 864e5 }[m[2] as "m" | "h" | "d"] : 0;
+};
+
+// Clicking a bar narrows the time range to that bar, so every tab shows just that slot.
+function Timeline({ data, bin, onRange }: { data: Overview["timeline"]; bin: string; onRange: (r: Range) => void }) {
   const [hover, setHover] = useState<number | null>(null);
+  const step = binMs(bin);
+  const zoom = (d: Overview["timeline"][number]) => {
+    const from = new Date(d.timestamp);
+    if (step && !Number.isNaN(from.getTime())) onRange(`c:${from.toISOString()}/${new Date(from.getTime() + step).toISOString()}`);
+  };
   const max = Math.max(1, ...data.map((d) => d.total));
   const h = hover != null ? data[hover] : null;
   return (
     <section className="rounded-xl border border-line p-4">
       <div className="mb-3 flex items-center justify-between">
-        <Tip content={G.ai.timeline}><span className="text-[12px] font-medium text-fg-2">Requests per {bin}</span></Tip>
+        <Tip content={G.ai.timeline}><span className="text-[12px] font-medium text-fg-2">Requests per {bin} <span className="font-normal text-fg-3">· click a bar to zoom in</span></span></Tip>
         <span className="text-[12px] tabular text-fg-3">
           {h ? <>{new Date(h.timestamp).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} · <span className="text-fg-2">{h.total.toLocaleString()}</span> requests · <span className={h.failed ? "text-bad" : ""}>{h.failed.toLocaleString()} failed</span></> : `peak ${max.toLocaleString()}`}
         </span>
       </div>
       <div className="flex h-28 items-end gap-px" onMouseLeave={() => setHover(null)}>
         {data.map((d, i) => (
-          <div key={d.timestamp} onMouseEnter={() => setHover(i)} className="relative flex h-full min-w-0 flex-1 flex-col justify-end">
+          <button key={d.timestamp} onMouseEnter={() => setHover(i)} onClick={() => zoom(d)} aria-label={`Show ${new Date(d.timestamp).toLocaleString()} only`} className="relative flex h-full min-w-0 flex-1 cursor-pointer flex-col justify-end">
             <div className={cn("w-full rounded-t-[2px] transition-colors duration-100", hover === i ? "bg-fg-2" : "bg-fg-3/45")} style={{ height: `${(d.total / max) * 100}%` }}>
               {d.failed > 0 && <div className="absolute bottom-0 w-full rounded-t-[2px] bg-bad" style={{ height: `${Math.max(2, (d.failed / max) * 100)}%` }} />}
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </section>
