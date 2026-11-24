@@ -14,6 +14,9 @@ import { ResizablePane, sortRows } from "../../ui/resize";
 import { store, stored } from "../../lib/storage";
 
 type MsgOrder = "queue" | "newest" | "largest" | "deliveries";
+const time = (it: Item) => (it.msg.enqueuedTime ? new Date(it.msg.enqueuedTime).getTime() || 0 : 0);
+// Sequence numbers are 64-bit, so they arrive as strings.
+const seqCmp = (a: Item, b: Item) => a.msg.sequenceNumber.length - b.msg.sequenceNumber.length || (a.msg.sequenceNumber < b.msg.sequenceNumber ? -1 : a.msg.sequenceNumber > b.msg.sequenceNumber ? 1 : 0);
 import * as G from "../../lib/glossary";
 import { mod, modClick } from "../../lib/platform";
 import { MessageDetail } from "./MessageDetail";
@@ -48,7 +51,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
       max,
     });
     const items = await Promise.all(r.messages.map(async (msg) => ({ msg, det: await detect(b64ToBytes(msg.body), msg.contentType) })));
-    return { auth: r.auth, items: items.reverse(), at: Date.now() };
+    return { auth: r.auth, items, at: Date.now() };
   });
 
   const [filter, setFilter] = useState("");
@@ -58,6 +61,7 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
   const [compare, setCompare] = useState<string | null>(null);
 
   const items = q.data?.items ?? [];
+  const total = counts ? (dlq ? counts.deadLetter : counts.active) : null;
   const reasons = useMemo(() => {
     const m = new Map<string, number>();
     for (const it of items) if (it.msg.deadLetterReason) m.set(it.msg.deadLetterReason, (m.get(it.msg.deadLetterReason) ?? 0) + 1);
@@ -80,11 +84,17 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
         (it.msg.messageId ?? "").toLowerCase().includes(f) ||
         (it.msg.correlationId ?? "").toLowerCase().includes(f) ||
         (it.msg.subject ?? "").toLowerCase().includes(f) ||
+        (it.msg.sessionId ?? "").toLowerCase().includes(f) ||
+        (it.msg.deadLetterReason ?? "").toLowerCase().includes(f) ||
+        (it.msg.deadLetterErrorDescription ?? "").toLowerCase().includes(f) ||
+        it.msg.sequenceNumber === f.replace(/^#/, "") ||
         JSON.stringify(it.msg.applicationProperties).toLowerCase().includes(f)
       );
     });
+    // Peek returns messages in queue order. Enqueued time can disagree with it: a dead-lettered message
+    // keeps the time it was first enqueued, not when it was dead-lettered.
     if (order === "queue") return kept;
-    if (order === "newest") return [...kept].reverse();
+    if (order === "newest") return [...kept].sort((a, b) => time(b) - time(a) || seqCmp(b, a));
     if (order === "largest") return sortRows(kept, { key: "s", dir: "desc" }, (it) => it.msg.size);
     return sortRows(kept, { key: "d", dir: "desc" }, (it) => it.msg.deliveryCount);
   }, [items, filter, reason, range, order]);
@@ -167,8 +177,8 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
               </div>
             )}
           </div>
-          <div className="flex h-9 shrink-0 items-center justify-between border-b border-line px-3 text-[12px] text-fg-3">
-            <span className="flex items-center gap-2">
+          <div className="flex h-9 shrink-0 items-center justify-between gap-3 whitespace-nowrap border-b border-line px-3 text-[12px] text-fg-3">
+            <span className="flex shrink-0 items-center gap-2">
               <span className="tabular">{q.data ? `${filtered.length} of ${items.length} peeked` : "—"}</span>
               {items.length > 1 && (
                 <Select<MsgOrder> value={order} onChange={(o) => { setOrder(o); store("sb.order", o); }} label="Sort messages" align="start"
@@ -180,8 +190,13 @@ export function EntityView({ entity, onBack }: { entity: EntityRef; onBack: () =
                 <GitCompare /> Comparing #{compare} <X />
               </Button>
             )}
-            {!compare && items.length > 1 && <Tip content={G.ui.compare} side="bottom"><span className="cursor-help">{modClick} a row to compare</span></Tip>}
+            {!compare && items.length > 1 && <Tip content={G.ui.compare} side="bottom" className="min-w-0"><span className="block cursor-help truncate">{modClick} a row to compare</span></Tip>}
           </div>
+          {q.data && total != null && items.length >= max && total > items.length && (
+            <div className="border-b border-warn/20 bg-warn/[0.06] px-3 py-1.5 text-[11.5px] leading-snug text-warn">
+              Showing the first {items.length.toLocaleString()} of {total.toLocaleString()} in queue order, so newer messages aren't here. Raise Peek size to see more.
+            </div>
+          )}
           {q.loading && !q.data ? (
             <div className="flex flex-1 items-center justify-center gap-2 text-[13px] text-fg-3"><Spinner /> Peeking messages</div>
           ) : !items.length && q.data ? (
