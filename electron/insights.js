@@ -45,6 +45,9 @@ export function operationIdOf(input) {
   if (/^[0-9a-z-]{8,64}$/i.test(s)) return s;
   throw new AppError("That isn't an operation id, trace id or traceparent.", "BAD_INPUT");
 }
+// A GUID pasted with dashes (a correlation id from a log or message) is stored by Application Insights
+// as 32 hex digits, so look for both spellings.
+const idsOf = (id) => (/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) ? [id, id.replace(/-/g, "").toLowerCase()] : [id]);
 
 // ─── Resources ────────────────────────────────────────────────────────────────
 const ikeys = new Map(); // component id -> instrumentation key, kept here for matching function apps
@@ -198,7 +201,7 @@ export async function trace({ component, operationId, at }) {
   const id = operationIdOf(operationId);
   const timespan = at ? `${new Date(new Date(at).getTime() - 6 * 3600e3).toISOString()}/${new Date(new Date(at).getTime() + 6 * 3600e3).toISOString()}` : "P7D";
   const items = await rowsOf(component, `union requests, dependencies, traces, exceptions, customEvents, pageViews
-    | where operation_Id == ${kq(id)}
+    | where operation_Id in ${kqList(idsOf(id))}
     | project ${TRACE_COLUMNS}
     | order by timestamp asc
     | take 5000`, timespan);
@@ -212,7 +215,7 @@ export async function findTrace({ subIds, operationId, at }) {
   const all = (await Promise.all(subIds.map((s) => components(s).catch(() => [])))).flat().slice(0, 80);
   const timespan = at ? `${new Date(new Date(at).getTime() - 6 * 3600e3).toISOString()}/${new Date(new Date(at).getTime() + 6 * 3600e3).toISOString()}` : "P7D";
   const results = await pool(all, 6, (c) => rowsOf(c, `union requests, dependencies, traces, exceptions
-    | where operation_Id == ${kq(id)}
+    | where operation_Id in ${kqList(idsOf(id))}
     | summarize n = count(), firstSeen = min(timestamp), roles = make_set(cloud_RoleName, 5)`, timespan));
   return {
     operationId: id,

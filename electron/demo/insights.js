@@ -207,10 +207,15 @@ export async function logs({ component, range = "24h", role, minSeverity = 0, se
 
 // Operation ids that came from somewhere else (a Service Bus traceparent, a Functions run) still get a
 // trace: an order flow, timed from `at` or a few minutes ago.
-export async function trace({ component, operationId, at }) {
+// With `search` (Find trace asking one resource at a time) only the resource findTrace would pick has it.
+export async function trace({ component, operationId, at, search }) {
   await wait(250);
   const c = byId(component.id) ?? all()[0];
-  const id = String(operationId).match(/[0-9a-f]{32}/i)?.[0]?.toLowerCase() ?? operationId;
+  const id = String(operationId).replace(/^([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})$/i, "$1$2$3$4$5").match(/[0-9a-f]{32}/i)?.[0]?.toLowerCase() ?? operationId;
+  if (search) {
+    const found = await findTrace({ subIds: [c.subscriptionId], operationId, at });
+    if (!found.hits.some((h) => h.component.id === c.id)) return { operationId: id, items: [] };
+  }
   return makeTrace(id, at ? new Date(at).getTime() : Date.now() - 5 * 6e4, c);
 }
 
@@ -220,7 +225,7 @@ export async function traceAcross({ components: comps, operationId, at }) {
 
 export async function findTrace({ subIds, operationId, at }) {
   await wait(900);
-  const id = String(operationId).match(/[0-9a-f]{32}/i)?.[0]?.toLowerCase();
+  const id = String(operationId).replace(/^([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})$/i, "$1$2$3$4$5").match(/[0-9a-f]{32}/i)?.[0]?.toLowerCase();
   if (!id) throw Object.assign(new Error("That isn't an operation id, trace id or traceparent."), { code: "BAD_INPUT" });
   const searched = subIds.flatMap((s) => COMPONENTS[s] ?? []);
   const hit = searched.find((c) => c.name.startsWith("acme-prod-app")) ?? searched.find((c) => c.name.startsWith("acme-dev"));

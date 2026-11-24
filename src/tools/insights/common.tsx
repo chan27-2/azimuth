@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { CalendarRange, Check, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/util";
-import type { Component, Range, Trace } from "../../types";
+import type { Component, Range, Trace, TraceItem } from "../../types";
 import { api } from "../../lib/api";
-import { useQuery } from "../../lib/query";
+import { fetchQuery, peekCache, useQuery } from "../../lib/query";
 import { Button, Tip } from "../../ui/ui";
 import * as G from "../../lib/glossary";
 import { stored, store } from "../../lib/storage";
@@ -141,14 +141,88 @@ export function useTrace(component: Component | undefined, operationId: string |
   const widen = async () => {
     if (!operationId) return;
     setWide({ state: "searching" });
-    try {
-      const found = await api.ai.findTrace({ subIds: [...new Set([component?.subscriptionId, ...subIds].filter(Boolean) as string[])], operationId, at });
-      const comps = found.hits.map((h) => h.component);
-      const trace = comps.length ? await api.ai.traceAcross({ components: comps, operationId, at }) : undefined;
-      setWide({ state: "done", trace });
-    } catch (e) {
-      setWide({ state: "idle", error: e instanceof Error ? e.message : String(e) });
-    }
+    const done = await searchTrace({ subIds: [...new Set([component?.subscriptionId, ...subIds].filter(Boolean) as string[])], operationId, at }, () => {});
+    setWide(done.error ? { state: "idle", error: done.error } : { state: "done", trace: done.trace });
   };
   return { trace: wide.trace ?? q.data, loading: q.loading, error: q.error ?? wide.error, widen, wide: wide.state };
+}
+
+// ─── Find trace ───────────────────────────────────────────────────────────────
+// Searches every Application Insights resource in the given subscriptions for one operation, reporting as
+// it goes: first listing resources per subscription, then asking each resource, six at a time. A resource
+// that has the operation returns its items in the same call, so the trace fills in as hits arrive.
+export const SEARCH_CAP = 80;
+const PARALLEL = 6;
+export type ResourceState = "waiting" | "searching" | "found" | "none" | "failed";
+export type TraceSearch = {
+  phase: "listing" | "searching" | "done";
+  operationId: string;
+  subsTotal: number; subsListed: number; subsFailed: number;
+  resources: { component: Component; state: ResourceState; n?: number }[];
+  skipped: number; // resources beyond SEARCH_CAP
+  trace?: Trace;
+  error?: string;
+};
+
+export async function searchTrace(
+  { subIds, operationId, at }: { subIds: string[]; operationId: string; at?: string },
+  onUpdate: (s: TraceSearch) => void,
+  cancelled: () => boolean = () => false,
+): Promise<TraceSearch> {
+  let s: TraceSearch = { phase: "listing", operationId, subsTotal: subIds.length, subsListed: 0, subsFailed: 0, resources: [], skipped: 0 };
+  const set = (patch: Partial<TraceSearch>) => { s = { ...s, ...patch }; if (!cancelled()) onUpdate(s); };
+  set({});
+
+  // Resource lists share the sidebar's cache, so subscriptions already expanded there are instant.
+  const found: Component[] = [];
+  await Promise.all(subIds.map(async (sub) => {
+    await fetchQuery(`aicomp:${sub}`, () => api.ai.components(sub));
+    const cs = peekCache<Component[]>(`aicomp:${sub}`);
+    if (cs) found.push(...cs);
+    set({ subsListed: s.subsListed + 1, subsFailed: s.subsFailed + (cs ? 0 : 1) });
+  }));
+  const all = found.slice(0, SEARCH_CAP);
+  set({ phase: "searching", resources: all.map((component) => ({ component, state: "waiting" })), skipped: found.length - all.length });
+
+  const items = new Map<string, TraceItem>();
+  const mark = (i: number, state: ResourceState, n?: number) => set({ resources: s.resources.map((r, k) => (k === i ? { ...r, state, n } : r)) });
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(PARALLEL, all.length) }, async () => {
+    while (next < all.length && !cancelled() && !s.error) {
+      const i = next++;
+      mark(i, "searching");
+      try {
+        const t = await api.ai.trace({ component: all[i], operationId, at, search: true });
+        for (const x of t.items) items.set(x.itemId || `${x.timestamp}|${x.itemType}|${items.size}`, x);
+        if (t.items.length) {
+          const merged = [...items.values()].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          set({ operationId: t.operationId, trace: { operationId: t.operationId, items: merged } });
+        }
+        mark(i, t.items.length ? "found" : "none", t.items.length);
+      } catch (e) {
+        // A malformed id fails the same way everywhere, so stop at the first one.
+        if ((e as { code?: string }).code === "BAD_INPUT") set({ error: (e as Error).message });
+        mark(i, "failed");
+      }
+    }
+  }));
+  set({ phase: "done" });
+  return s;
+}
+
+// Searches are kept for the session, so going back to a finished search doesn't run it again.
+const searches = new Map<string, TraceSearch>();
+export function useTraceSearch(subIds: string[], operationId: string, at?: string) {
+  const key = `${operationId}|${at ?? ""}|${subIds.join(",")}`;
+  const [state, setState] = useState<TraceSearch | undefined>(() => searches.get(key));
+  useEffect(() => {
+    const done = searches.get(key);
+    if (done) { setState(done); return; }
+    let stop = false;
+    searchTrace({ subIds, operationId, at }, setState, () => stop).then((r) => { if (!stop && !r.error) searches.set(key, r); });
+    return () => { stop = true; };
+    // The key covers every input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return state;
 }

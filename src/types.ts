@@ -118,7 +118,7 @@ export type Api = {
     overview(arg: { component: Component; range: Range; role?: string | null }): Promise<Overview>;
     requests(arg: { component: Component; range: Range; role?: string | null; name?: string; failedOnly?: boolean; minDuration?: number; search?: string; limit?: number }): Promise<RequestRow[]>;
     logs(arg: { component: Component; range: Range; role?: string | null; minSeverity?: number; search?: string; operationName?: string; after?: string; limit?: number }): Promise<LogRow[]>;
-    trace(arg: { component: Component; operationId: string; at?: string }): Promise<Trace>;
+    trace(arg: { component: Component; operationId: string; at?: string; search?: boolean }): Promise<Trace>;
     traceAcross(arg: { components: Component[]; operationId: string; at?: string }): Promise<Trace>;
     findTrace(arg: { subIds: string[]; operationId: string; at?: string }): Promise<FoundTrace>;
     query(arg: { component: Component; kql: string; range: Range }): Promise<QueryResult>;
